@@ -106,6 +106,17 @@
 	<Target Name="CompileMecShader" BeforeTargets="BeforeBuild"
 	        Inputs="$(MecShaderSource);$(MSBuildProjectDirectory)\..\..\Shaders\Common.h"
 	        Outputs="$(MecShaderOutput)">
+		<!-- The repo's Shaders\fxc.exe needs d3dcompiler_47.dll next to it, so prefer the Windows SDK's fxc.exe. -->
+		<ItemGroup>
+			<SdkFxc Include="$(MSBuildProgramFiles32)\Windows Kits\10\bin\10.*\x64\fxc.exe" />
+		</ItemGroup>
+		<PropertyGroup>
+			<SdkFxcPath>%(SdkFxc.FullPath)</SdkFxcPath>
+		</PropertyGroup>
+		<PropertyGroup>
+			<FxcPath Condition="'$(SdkFxcPath)' != ''">$(SdkFxcPath)</FxcPath>
+		</PropertyGroup>
+		<Message Importance="high" Text="Compiling MEC fallback shader with $(FxcPath)" />
 		<MakeDir Directories="$(MSBuildProjectDirectory)\obj\Shaders" />
 		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T ps_5_0 /E PS_MeshFallback /O3 /Fo &quot;$(MecShaderOutput)&quot; &quot;$(MecShaderSource)&quot;" />
 	</Target>
