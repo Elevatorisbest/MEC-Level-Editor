@@ -15,6 +15,8 @@ public class ComponentEntity : SpatialEntity, IEntityData<FrostySdk.Ebx.Componen
         set
         {
             requiresTransformUpdate = value;
+            if (value)
+                MarkTransformDirty();
             foreach (Entity component in Components)
             {
                 component.RequiresTransformUpdate = value;

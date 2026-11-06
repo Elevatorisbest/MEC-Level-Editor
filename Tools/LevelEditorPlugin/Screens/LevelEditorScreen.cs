@@ -404,6 +404,16 @@ public class LevelEditorScreen : DeferredRenderScreen2
     private ProxyGrid proxyGrid;
     private readonly List<RenderProxy> cullCandidates = [];
 
+    // Proxy updates: all proxies only when an entity transform changed (or every 2 s as a safety
+    // net); proxies that need it (terrain preview) every frame.
+    private readonly List<RenderProxy> perFrameUpdateProxies = [];
+    private int lastTransformGeneration = int.MinValue;
+    private long lastFullProxyUpdate;
+
+    // reused buffers for sorting draw instances
+    private double[] sortKeys = new double[0];
+    private MeshRenderInstance[] sortItems = new MeshRenderInstance[0];
+
     private TranslateGizmo translateGizmo;
     private BindableDepthTexture gizmoDepthTexture;
 
@@ -441,6 +451,12 @@ public class LevelEditorScreen : DeferredRenderScreen2
                 throw;
             }
             proxies.AddRange(newProxies);
+            foreach (RenderProxy newProxy in newProxies)
+            {
+                if (newProxy.NeedsPerFrameUpdate)
+                    perFrameUpdateProxies.Add(newProxy);
+            }
+            lastTransformGeneration = int.MinValue; // run one full update pass for the new proxies
             if (proxyGrid != null)
             {
                 // added after the grid was built (e.g. a copy): always test until the next rebuild
@@ -464,6 +480,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
             foreach (RenderProxy renderProxy in foundProxies)
             {
                 proxies.Remove(renderProxy);
+                perFrameUpdateProxies.Remove(renderProxy);
             }
             InvalidateProxyGrid();
         });
@@ -488,8 +505,21 @@ public class LevelEditorScreen : DeferredRenderScreen2
         }
 
         long diagUpdateStart = System.Diagnostics.Stopwatch.GetTimestamp();
-        foreach (RenderProxy proxy in proxies)
-            proxy.Update(RenderCreateState);
+        int transformGeneration = Entity.TransformDirtyGeneration;
+        bool safetyScanDue = (diagUpdateStart - lastFullProxyUpdate) > 2 * System.Diagnostics.Stopwatch.Frequency;
+        if (transformGeneration != lastTransformGeneration || safetyScanDue)
+        {
+            // read the generation before the pass so changes made during it trigger another pass
+            lastTransformGeneration = transformGeneration;
+            lastFullProxyUpdate = diagUpdateStart;
+            foreach (RenderProxy proxy in proxies)
+                proxy.Update(RenderCreateState);
+        }
+        else
+        {
+            foreach (RenderProxy proxy in perFrameUpdateProxies)
+                proxy.Update(RenderCreateState);
+        }
         frameStats.Updated(ElapsedMs(diagUpdateStart));
     }
 
@@ -610,6 +640,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         InvalidateProxyGrid();
         proxies.Clear();
+        perFrameUpdateProxies.Clear();
         selectedProxies.Clear();
 
         SolidColorMeshWrapper.DisposeSharedState();
@@ -806,25 +837,27 @@ public class LevelEditorScreen : DeferredRenderScreen2
             D3DUtils.BeginPerfEvent(Viewport.Context, "RenderMeshes_Sorted");
             {
                 // 先按 RenderMesh 类型分组（Terrain -> Model -> 其它），再按距离从近到远排序
-                int GetRenderCategory(MeshRenderInstance inst)
-                {
-                    if (inst.RenderMesh is TerrainRenderProxy) return 0;
-                    if (inst.RenderMesh is ModelRenderProxy) return 1;
-                    return 2;
-                }
-
+                // Same order as before (category, then distance), but each instance's key is computed
+                // once instead of in every comparison (the comparison did type checks each time).
                 long diagSortStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                meshList.Sort((a, b) =>
+                int count = meshList.Count;
+                if (sortKeys.Length < count)
                 {
-                    int ca = GetRenderCategory(a);
-                    int cb = GetRenderCategory(b);
-                    if (ca != cb)
-                        return ca.CompareTo(cb);
-
-                    float da = (a.RenderMesh as RenderProxy)?.CurrentDistanceToCamera ?? 0.0f;
-                    float db = (b.RenderMesh as RenderProxy)?.CurrentDistanceToCamera ?? 0.0f;
-                    return da.CompareTo(db);
-                });
+                    sortKeys = new double[count * 2];
+                    sortItems = new MeshRenderInstance[count * 2];
+                }
+                for (int i = 0; i < count; i++)
+                {
+                    MeshRenderInstance inst = meshList[i];
+                    int category = (inst.RenderMesh is TerrainRenderProxy) ? 0 : (inst.RenderMesh is ModelRenderProxy) ? 1 : 2;
+                    float distance = (inst.RenderMesh as RenderProxy)?.CurrentDistanceToCamera ?? 0.0f;
+                    sortKeys[i] = category * 1.0e9 + distance;
+                    sortItems[i] = inst;
+                }
+                Array.Sort(sortKeys, sortItems, 0, count);
+                meshList.Clear();
+                for (int i = 0; i < count; i++)
+                    meshList.Add(sortItems[i]);
                 frameStats.Sorted(ElapsedMs(diagSortStart));
 
                 long diagDrawStart = System.Diagnostics.Stopwatch.GetTimestamp();

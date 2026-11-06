@@ -17,6 +17,8 @@ public class Component : Entity, IEntityData<FrostySdk.Ebx.ComponentData>, ISpat
         set
         {
             requiresTransformUpdate = value;
+            if (value)
+                MarkTransformDirty();
             foreach (Entity entity in Components)
                 entity.RequiresTransformUpdate = value;
         }

@@ -119,6 +119,8 @@ public class ModelRenderProxy : RenderProxy
         return OwnerEntity.IsVisible && screenSize > renderData.CullScreenArea;
     }
 
+    public override float MinScreenSize => renderData.CullScreenArea;
+
     public override MeshRenderInstance GetInstance(float distToCamera)
     {
         lodIndex = 0;

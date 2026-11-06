@@ -123,6 +123,7 @@ public class SpatialPrefabEditor : SpatialEditor
         timer.Start();
 
         LoadReport report = LoadReport.Begin(AssetEntry.Name, AssetEntry.Type);
+        LevelEditor.EnsureMeshVariationsLoaded(report);
 
         FrostyTaskWindow.Show($"Loading {Path.GetFileName(AssetEntry.Name)}", "", (task) =>
         {

@@ -96,6 +96,9 @@ public class TerrainRenderProxy : RenderProxy
         }
     }
 
+    // preview layer/hole selection is polled every frame
+    public override bool NeedsPerFrameUpdate => true;
+
     public override void Update(RenderCreateState state)
     {
         TerrainEntity terrainEntity = OwnerEntity as TerrainEntity;

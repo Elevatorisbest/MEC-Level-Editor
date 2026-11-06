@@ -706,6 +706,30 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         }
     }
 
+    /// <summary>
+    /// Mesh materials get most of their textures from the game's mesh variation databases
+    /// (Frosty's MeshVariationDb, the "root" variation of each mesh). Frosty only loads that
+    /// database when a mesh is opened in the mesh editor, so without this call every level mesh
+    /// fell back to its shader's default texture (the dev grid in Mirror's Edge Catalyst).
+    /// </summary>
+    internal static void EnsureMeshVariationsLoaded(LoadReport report)
+    {
+        Stopwatch timer = Stopwatch.StartNew();
+        bool wasLoaded = Frosty.Core.Viewport.MeshVariationDb.IsLoaded;
+        try
+        {
+            if (!wasLoaded)
+                FrostyTaskWindow.Show("Loading mesh variations", "", Frosty.Core.Viewport.MeshVariationDb.LoadVariations);
+            Frosty.Core.Viewport.MeshVariationDb.LoadModifiedVariations();
+            LevelEditorLog.Info("Load", $"Mesh variation database {(wasLoaded ? "was already loaded" : "loaded")}: {Frosty.Core.Viewport.MeshVariationDb.Entries.Count} meshes with variations");
+        }
+        catch (System.Exception ex)
+        {
+            LevelEditorLog.Error("Load", "Loading the mesh variation database failed; meshes will show shader default textures", ex);
+        }
+        report.AddTiming(wasLoaded ? "Mesh variation database (already loaded)" : "Loading mesh variation database", timer.Elapsed.TotalMilliseconds);
+    }
+
     private void TimedDockLoad(LoadReport report, string name, Func<Controls.IDockableItem> create)
     {
         Stopwatch t = Stopwatch.StartNew();
@@ -719,6 +743,7 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         timer.Start();
 
         LoadReport report = LoadReport.Begin(AssetEntry.Name, AssetEntry.Type);
+        EnsureMeshVariationsLoaded(report);
 
         // first time loading stuff goes here
         FrostyTaskWindow.Show($"Loading {Path.GetFileName(AssetEntry.Name)}", "", (task) =>

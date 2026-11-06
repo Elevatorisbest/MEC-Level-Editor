@@ -42,6 +42,8 @@ public class SpatialEntity : Entity, IEntityData<FrostySdk.Ebx.SpatialEntityData
         set
         {
             requiresTransformUpdate = value;
+            if (value)
+                MarkTransformDirty();
         }
     }
     public virtual string Icon => "";

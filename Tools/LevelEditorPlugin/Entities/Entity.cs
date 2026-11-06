@@ -249,6 +249,18 @@ public abstract class Entity : INotifyPropertyChanged, IEbxType
         {
         }
     }
+
+    private static int transformDirtyGeneration;
+
+    /// <summary>
+    /// Incremented whenever any entity is flagged as needing a transform update. The screen only
+    /// walks all render proxies when this changed, instead of every frame (~25 ms per frame with
+    /// SP_MainCity's 357k proxies).
+    /// </summary>
+    public static int TransformDirtyGeneration => System.Threading.Volatile.Read(ref transformDirtyGeneration);
+
+    /// <summary>Call from every RequiresTransformUpdate setter (and direct field writes) when set to true.</summary>
+    public static void MarkTransformDirty() => System.Threading.Interlocked.Increment(ref transformDirtyGeneration);
     public Guid FileGuid => fileGuid;
     public Guid InstanceGuid => instanceGuid;
 

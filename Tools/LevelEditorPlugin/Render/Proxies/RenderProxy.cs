@@ -33,6 +33,7 @@ public abstract class RenderProxy : MeshRenderBase
     internal BoundingBox GridBounds;
     internal Vector3 GridTranslation;
     internal float GridRadius;
+    internal float GridReach;
     internal bool GridDynamic;
     private bool boundingSphereDirty = true;
 
@@ -62,6 +63,15 @@ public abstract class RenderProxy : MeshRenderBase
     {
         throw new NotImplementedException();
     }
+
+    /// <summary>True if <see cref="Update"/> must run every frame, not only after transform changes.</summary>
+    public virtual bool NeedsPerFrameUpdate => false;
+
+    /// <summary>
+    /// Minimum screen size below which <see cref="ShouldRender"/> always returns false (used by the
+    /// culling grid; must never be larger than the real threshold).
+    /// </summary>
+    public virtual float MinScreenSize => 0.0f;
 
     public virtual void Update(RenderCreateState state)
     {

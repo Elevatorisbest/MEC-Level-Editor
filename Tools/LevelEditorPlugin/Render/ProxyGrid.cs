@@ -13,8 +13,9 @@ namespace LevelEditorPlugin.Render;
 ///
 /// The grid only produces candidates; the caller still runs its normal per-proxy tests, so what
 /// is drawn does not change. A cell is skipped when its bounds are outside the view frustum, and
-/// inside a cell (proxies sorted by radius, largest first) the scan stops at the first proxy that
-/// is too small to pass the caller's minimum screen-size test at the cell's nearest distance.
+/// inside a cell (proxies sorted by "reach" = radius / own cull screen size, largest first) the
+/// scan stops at the first proxy too small to pass its own ShouldRender cull test at the cell's
+/// nearest distance; proxies below the caller's global minimum size are skipped.
 ///
 /// Proxies whose bounds grow or move after the grid was built (edits), and proxies added later
 /// (copies), are kept in an "always test" list. The grid is rebuilt when that list gets large or
@@ -55,11 +56,14 @@ internal sealed class ProxyGrid
             BoundingBox box = proxy.BoundingBox;
             Vector3 translation = proxy.Transform.TranslationVector;
             float radius = BoundingSphere.FromBox(box).Radius;
+            float ownCull = proxy.MinScreenSize;
 
             proxy.Grid = grid;
             proxy.GridBounds = box;
             proxy.GridTranslation = translation;
             proxy.GridRadius = radius;
+            // ShouldRender needs 2r / viewSize(distance) > ownCull, i.e. r / ownCull > viewSize / 2
+            proxy.GridReach = ownCull > 0.0f ? radius / ownCull : float.MaxValue;
             proxy.GridDynamic = false;
 
             if (radius > LargeRadius || float.IsNaN(radius) || float.IsInfinity(radius))
@@ -89,7 +93,7 @@ internal sealed class ProxyGrid
         }
 
         foreach (Cell cell in grid.cells)
-            cell.Proxies.Sort((a, b) => b.GridRadius.CompareTo(a.GridRadius));
+            cell.Proxies.Sort((a, b) => b.GridReach.CompareTo(a.GridReach));
 
         LevelEditorLog.Info("Render", $"Culling grid built in {timer.Elapsed.TotalMilliseconds:N0} ms: {proxies.Count} proxies, {grid.cells.Count} cells of {CellSize} m, {large} large proxies always tested");
         return grid;
@@ -135,26 +139,25 @@ internal sealed class ProxyGrid
                 if (frustum.Contains(cell.Bounds) == ContainmentType.Disjoint)
                     continue;
 
-                float radiusThreshold = 0.0f;
-                if (minScreenSize > 0.0f)
-                {
-                    BoundingBox bounds = cell.Bounds;
-                    float nearest = (float)Math.Sqrt(Math.Max(0.0f, DistanceSquared(ref bounds, ref cameraPosition)));
-                    if (nearest > 0.0f)
-                    {
-                        float minDim = Math.Min(frustum.GetWidthAtDepth(nearest), frustum.GetHeightAtDepth(nearest));
-                        radiusThreshold = minScreenSize * minDim * 0.5f;
-                    }
-                }
+                // Half of the smaller view dimension at the cell's nearest point. Every proxy in the
+                // cell is at least this far away, so this bounds how large it can appear.
+                float halfView = 0.0f;
+                BoundingBox bounds = cell.Bounds;
+                float nearest = (float)Math.Sqrt(Math.Max(0.0f, DistanceSquared(ref bounds, ref cameraPosition)));
+                if (nearest > 0.0f)
+                    halfView = Math.Min(frustum.GetWidthAtDepth(nearest), frustum.GetHeightAtDepth(nearest)) * 0.5f;
+
+                float radiusThreshold = minScreenSize * halfView;
 
                 List<RenderProxy> list = cell.Proxies;
                 for (int i = 0; i < list.Count; i++)
                 {
                     RenderProxy proxy = list[i];
-                    if (proxy.GridRadius < radiusThreshold)
-                        break; // sorted by radius: every remaining proxy is too small at this distance
-                    if (!proxy.GridDynamic)
-                        output.Add(proxy);
+                    if (proxy.GridReach < halfView)
+                        break; // sorted by reach: every remaining proxy is below its own cull size here
+                    if (proxy.GridRadius < radiusThreshold || proxy.GridDynamic)
+                        continue; // below the caller's global minimum size, or tested via alwaysTest
+                    output.Add(proxy);
                 }
             }
 

@@ -34,6 +34,8 @@ public class ReferenceObject : Entity, ISpatialReferenceEntity, ILogicEntity
         set
         {
             requiresTransformUpdate = value;
+            if (value)
+                MarkTransformDirty();
 
             foreach (Entity entity in entities)
             {
@@ -334,6 +336,7 @@ public class ReferenceObject : Entity, ISpatialReferenceEntity, ILogicEntity
         Data.BlueprintTransform = MakeLinearTransform(m);
         NotifyEntityModified("BlueprintTransform");
         requiresTransformUpdate = true;
+        MarkTransformDirty();
     }
 
     public Entity FindEntity(Guid instanceGuid)
