@@ -50,8 +50,14 @@
                         x:Name="CheckBox_EmissiveOnly"
                         Margin="3"
                         Click="ViewFilter_Click"
-                        Content="Emissive-only meshes (light cards)"
-                        ToolTip="Meshes whose materials only have emissive textures, e.g. Ground_Lights_02 over the streets. The load report lists them." />
+                        Content="Light cards"
+                        ToolTip="Flat glow-only meshes, e.g. Ground_Lights_02 over the streets and light-strip decals. The load report lists them." />
+                    <CheckBox
+                        x:Name="CheckBox_Instancing"
+                        Margin="3"
+                        Click="ViewFilter_Click"
+                        Content="Instanced drawing"
+                        ToolTip="Draw repeated meshes together (faster). Turn off to compare if something looks misplaced." />
                     <CheckBox
                         x:Name="CheckBox_HelperIcons"
                         Margin="3"

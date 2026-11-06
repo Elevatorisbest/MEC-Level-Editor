@@ -636,6 +636,9 @@ namespace Frosty.Core.Viewport
             Vector2 mecTiling = Vector2.One;
             float mecDetailTiling = 1.0f, mecDetailStrength = 1.0f;
             ShaderResourceView mecDetailNormal = null;
+            // MEC: emissive texture/colour, used as the colour of glow-only materials
+            PointerRef? mecEmissiveTexture = null;
+            Vector4? mecEmissiveColor = null;
 
             // vector params
             foreach (dynamic vectorParam in material.VectorParameters)
@@ -715,6 +718,8 @@ namespace Frosty.Core.Viewport
                     }
                     else if (paramName.Equals("BaseColor", StringComparison.OrdinalIgnoreCase) || paramName.Equals("Color", StringComparison.OrdinalIgnoreCase))
                         mecAltColor = new SharpDX.Vector4(vectorParam.Value.x, vectorParam.Value.y, vectorParam.Value.z, 0.0f);
+                    else if (paramName.Equals("EmissiveColor", StringComparison.OrdinalIgnoreCase))
+                        mecEmissiveColor = new SharpDX.Vector4(vectorParam.Value.x, vectorParam.Value.y, vectorParam.Value.z, 0.0f);
                     else if (paramName.Equals("AbsorbtionColor", StringComparison.OrdinalIgnoreCase))
                         mecAbsorbtionColor = new SharpDX.Vector4(vectorParam.Value.x, vectorParam.Value.y, vectorParam.Value.z, 0.0f);
                     // These used to go to TintColorB.x/y, which Frosty's MEC shader applied to the MAIN
@@ -875,6 +880,10 @@ namespace Frosty.Core.Viewport
                     else if (paramName.Equals("NormalDetail") && mecDetailNormal == null)
                     {
                         mecDetailNormal = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid);
+                    }
+                    else if (paramName.Equals("Emissive") && mecEmissiveTexture == null)
+                    {
+                        mecEmissiveTexture = value;
                     }
                 }
 
@@ -1220,6 +1229,27 @@ namespace Frosty.Core.Viewport
             // MEC: a material without colour texture and without DiffuseColor would render plain white.
             // Use other colour hints, and draw glass (MEC's glass shaders are not reproduced by the
             // fallback shader) as a dark tint of its absorption colour instead. Approximation only.
+            // MEC: glow-only material (emissive texture, no colour texture, no DiffuseColor), e.g. light
+            // panels, logo backlights: draw the emissive texture as the colour, tinted by EmissiveColor,
+            // instead of plain white. (The fallback shader has no glow, so this only shows the pattern.)
+            if (ProfilesLibrary.IsLoaded(ProfileVersion.MirrorsEdgeCatalyst) && mecDiffuseScore == 0 && TintColorB.Z < 0.5f
+                && mecAltColor == null && mecEmissiveTexture != null)
+            {
+                ShaderResourceView srv = state.TextureLibrary.LoadTextureAsset(mecEmissiveTexture.Value.External.FileGuid);
+                if (srv != null)
+                {
+                    DiffuseTexture = srv;
+                    mecDiffuseScore = 1;
+                    TintColorA.W = 1.0f;
+                    if (mecEmissiveColor != null)
+                    {
+                        TintColorA = new Vector4(mecEmissiveColor.Value.X, mecEmissiveColor.Value.Y, mecEmissiveColor.Value.Z, 1.0f);
+                        TintColorB.Z = 1.0f;
+                    }
+                    MecFallbackStats.Count("emissive texture used as colour");
+                }
+            }
+
             if (ProfilesLibrary.IsLoaded(ProfileVersion.MirrorsEdgeCatalyst) && mecDiffuseScore == 0 && TintColorB.Z < 0.5f)
             {
                 Vector4? hint = mecAltColor;

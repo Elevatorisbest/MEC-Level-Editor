@@ -117,6 +117,18 @@ public class ModelRenderProxy : RenderProxy
         }
     }
 
+    /// <summary>
+    /// The textured LOD chosen by the last GetInstance call, when it can be drawn instanced
+    /// (see InstancedMeshBatcher); null when this proxy has to be drawn on its own.
+    /// </summary>
+    public MeshSetPlugin.Render.MeshRenderLod GetInstancedLod()
+    {
+        if (!renderData.ShouldUseTexturedRendering || !InstancedMeshBatcher.Supported)
+            return null;
+        MeshSetPlugin.Render.MeshRenderLod lod = renderData.TexturedMesh.GetLod(lodIndex);
+        return (lod != null && lod.AllSectionsFallback) ? lod : null;
+    }
+
     public override bool ShouldRender(float distToCamera, float screenSize)
     {
         return OwnerEntity.IsVisible && screenSize > renderData.CullScreenArea;

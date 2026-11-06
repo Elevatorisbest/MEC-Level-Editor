@@ -380,10 +380,11 @@ public class MeshRenderable : BaseRenderable
     public MeshMaterialCollection DebugMaterials { get; set; }
 
     /// <summary>
-    /// Every material only has emissive textures (light cards such as Ground_Lights_02). Such meshes
-    /// can be hidden from the viewport (LevelEditorViewFilter.EmissiveOnlyMeshes).
+    /// Flat light card (e.g. Ground_Lights_02 over the streets, light-strip decals): every material
+    /// only has emissive textures and uses a ground-lights or decal shader. Hidden from the viewport
+    /// unless LevelEditorViewFilter.LightCards is on.
     /// </summary>
-    public bool IsEmissiveOnly { get; set; }
+    public bool IsLightCard { get; set; }
 
     /// <summary>Diagnostics: time spent building the untextured (position/normal) LODs at load.</summary>
     public double UntexturedBuildMilliseconds { get; private set; }

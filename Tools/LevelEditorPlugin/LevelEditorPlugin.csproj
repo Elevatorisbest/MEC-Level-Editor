@@ -94,6 +94,8 @@
 	<PropertyGroup>
 		<MecShaderSource>$(MSBuildProjectDirectory)\Shaders\MecMeshFallback.hlsl</MecShaderSource>
 		<MecShaderOutput>$(MSBuildProjectDirectory)\obj\Shaders\MecMeshFallback.pso</MecShaderOutput>
+		<MecVsSource>$(MSBuildProjectDirectory)\Shaders\MecMeshFallbackVS.hlsl</MecVsSource>
+		<MecVsOutput>$(MSBuildProjectDirectory)\obj\Shaders\MecMeshFallback.vso</MecVsOutput>
 		<FxcPath>$(MSBuildProjectDirectory)\..\..\Shaders\fxc.exe</FxcPath>
 	</PropertyGroup>
 
@@ -101,11 +103,14 @@
 		<EmbeddedResource Include="$(MecShaderOutput)">
 			<LogicalName>LevelEditorPlugin.Shaders.MecMeshFallback.pso</LogicalName>
 		</EmbeddedResource>
+		<EmbeddedResource Include="$(MecVsOutput)">
+			<LogicalName>LevelEditorPlugin.Shaders.MecMeshFallback.vso</LogicalName>
+		</EmbeddedResource>
 	</ItemGroup>
 
 	<Target Name="CompileMecShader" BeforeTargets="BeforeBuild"
-	        Inputs="$(MecShaderSource);$(MSBuildProjectDirectory)\..\..\Shaders\Common.h"
-	        Outputs="$(MecShaderOutput)">
+	        Inputs="$(MecShaderSource);$(MecVsSource);$(MSBuildProjectDirectory)\..\..\Shaders\Common.h"
+	        Outputs="$(MecShaderOutput);$(MecVsOutput)">
 		<!-- The repo's Shaders\fxc.exe needs d3dcompiler_47.dll next to it, so prefer the Windows SDK's fxc.exe. -->
 		<ItemGroup>
 			<SdkFxc Include="$(MSBuildProgramFiles32)\Windows Kits\10\bin\10.*\x64\fxc.exe" />
@@ -119,6 +124,7 @@
 		<Message Importance="high" Text="Compiling MEC fallback shader with $(FxcPath)" />
 		<MakeDir Directories="$(MSBuildProjectDirectory)\obj\Shaders" />
 		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T ps_5_0 /E PS_MeshFallback /O3 /Fo &quot;$(MecShaderOutput)&quot; &quot;$(MecShaderSource)&quot;" />
+		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T vs_5_0 /E VS_Main /O3 /Fo &quot;$(MecVsOutput)&quot; &quot;$(MecVsSource)&quot;" />
 	</Target>
 
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">

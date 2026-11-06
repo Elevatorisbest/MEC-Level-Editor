@@ -67,8 +67,9 @@ public partial class MeshView : UserControl
 
         CheckBox_Bloom.IsChecked = LevelEditorViewFilter.Bloom;
         CheckBox_CollisionVolumes.IsChecked = LevelEditorViewFilter.CollisionVolumes;
-        CheckBox_EmissiveOnly.IsChecked = LevelEditorViewFilter.EmissiveOnlyMeshes;
+        CheckBox_EmissiveOnly.IsChecked = LevelEditorViewFilter.LightCards;
         CheckBox_HelperIcons.IsChecked = LevelEditorViewFilter.HelperIcons;
+        CheckBox_Instancing.IsChecked = LevelEditorViewFilter.Instancing;
 
         // Initialize terrain edit mode UI
         if (CheckBox_TerrainEditMode != null)
@@ -84,8 +85,9 @@ public partial class MeshView : UserControl
     {
         LevelEditorViewFilter.Bloom = CheckBox_Bloom.IsChecked == true;
         LevelEditorViewFilter.CollisionVolumes = CheckBox_CollisionVolumes.IsChecked == true;
-        LevelEditorViewFilter.EmissiveOnlyMeshes = CheckBox_EmissiveOnly.IsChecked == true;
+        LevelEditorViewFilter.LightCards = CheckBox_EmissiveOnly.IsChecked == true;
         LevelEditorViewFilter.HelperIcons = CheckBox_HelperIcons.IsChecked == true;
+        LevelEditorViewFilter.Instancing = CheckBox_Instancing.IsChecked == true;
     }
 
     private void ComboBox_ViewMode_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

@@ -19,7 +19,7 @@ public sealed class FrameStats
     private int frames;
     private double sumFrameMs, maxFrameMs;
     private double sumCollectMs, sumSortMs, sumDrawMs;
-    private long sumVisible, sumDraws, sumCandidates;
+    private long sumVisible, sumDraws, sumCandidates, sumInstanced, sumGroups;
     private double sumUpdateMs;
     private int lastProxyCount;
 
@@ -66,10 +66,12 @@ public sealed class FrameStats
 
     public void Sorted(double ms) => sumSortMs += ms;
 
-    public void Drawn(double ms, int drawCount)
+    public void Drawn(double ms, int drawCount, int instancedCount = 0, int groupCount = 0)
     {
         sumDrawMs += ms;
         sumDraws += drawCount;
+        sumInstanced += instancedCount;
+        sumGroups += groupCount;
     }
 
     private void Flush()
@@ -82,11 +84,12 @@ public sealed class FrameStats
             $"{name}: {1000.0 / avgFrame:N1} fps (frame avg {avgFrame:N1} ms, worst {maxFrameMs:N1} ms over {frames} frames) | " +
             $"proxy updates {sumUpdateMs / frames:N1} ms | " +
             $"culling {sumCollectMs / frames:N1} ms ({lastProxyCount} proxies, {sumCandidates / frames} tested, {sumVisible / frames} visible) | " +
-            $"sorting {sumSortMs / frames:N1} ms | mesh draws {sumDrawMs / frames:N1} ms ({sumDraws / frames} instances)");
+            $"sorting {sumSortMs / frames:N1} ms | mesh draws {sumDrawMs / frames:N1} ms ({sumDraws / frames} instances, " +
+            $"{sumInstanced / frames} of them instanced in {sumGroups / frames} batches)");
 
         frames = 0;
         sumFrameMs = maxFrameMs = sumCollectMs = sumSortMs = sumDrawMs = 0;
-        sumVisible = sumDraws = sumCandidates = 0;
+        sumVisible = sumDraws = sumCandidates = sumInstanced = sumGroups = 0;
         sumUpdateMs = 0;
     }
 }

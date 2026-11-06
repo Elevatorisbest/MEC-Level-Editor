@@ -645,6 +645,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
         selectedProxies.Clear();
 
         SolidColorMeshWrapper.DisposeSharedState();
+        instanceBatcher.Dispose();
     }
 
     public override void CreateBuffers()
@@ -884,8 +885,14 @@ public class LevelEditorScreen : DeferredRenderScreen2
                 frameStats.Sorted(ElapsedMs(diagSortStart));
 
                 long diagDrawStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                bool instancing = LevelEditorRenderingOptions.UseTexturedModelRendering && LevelEditorViewFilter.Instancing && InstancedMeshBatcher.Supported;
+                instanceBatcher.Begin();
                 foreach (MeshRenderInstance mesh in meshList)
                 {
+                    // repeated textured meshes are drawn together after this loop
+                    if (instancing && instanceBatcher.TryAdd(mesh))
+                        continue;
+
                     D3DUtils.BeginPerfEvent(Viewport.Context, mesh.RenderMesh.DebugName);
                     {
                         Matrix transform = mesh.Transform;
@@ -915,7 +922,30 @@ public class LevelEditorScreen : DeferredRenderScreen2
                     }
                     D3DUtils.EndPerfEvent(Viewport.Context);
                 }
-                frameStats.Drawn(ElapsedMs(diagDrawStart), meshList.Count);
+                if (instancing)
+                {
+                    D3DUtils.BeginPerfEvent(Viewport.Context, "InstancedMeshes");
+                    // world matrix comes from the instance buffer; the light probe is shared
+                    functionConstants.UpdateData(Viewport.Context, new FunctionConstants()
+                    {
+                        WorldMatrix = Matrix.Identity,
+                        LightProbe1 = SHLightProbe[0],
+                        LightProbe2 = SHLightProbe[1],
+                        LightProbe3 = SHLightProbe[2],
+                        LightProbe4 = SHLightProbe[3],
+                        LightProbe5 = SHLightProbe[4],
+                        LightProbe6 = SHLightProbe[5],
+                        LightProbe7 = SHLightProbe[6],
+                        LightProbe8 = SHLightProbe[7],
+                        LightProbe9 = SHLightProbe[8],
+                    });
+                    Viewport.Context.VertexShader.SetConstantBuffer(1, functionConstants.Buffer);
+                    Viewport.Context.PixelShader.SetConstantBuffer(1, functionConstants.Buffer);
+                    instanceBatcher.Flush(Viewport.Context);
+                    D3DUtils.EndPerfEvent(Viewport.Context);
+                }
+                frameStats.Drawn(ElapsedMs(diagDrawStart), meshList.Count,
+                    instancing ? instanceBatcher.LastInstanceCount : 0, instancing ? instanceBatcher.LastGroupCount : 0);
             }
             D3DUtils.EndPerfEvent(Viewport.Context);
         }
@@ -1271,6 +1301,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
     private static bool gpuInfoLogged;
     private readonly FrameStats frameStats = new FrameStats("Level editor viewport");
+    private readonly InstancedMeshBatcher instanceBatcher = new InstancedMeshBatcher();
 
     private static string QueryGpuMemory(SharpDX.Direct3D11.Device device)
     {

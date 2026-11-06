@@ -229,6 +229,47 @@ namespace MeshSetPlugin.Render
             }
         }
 
+        /// <summary>
+        /// True when every section uses the fallback shader, whose vertex shader (for MEC, the level
+        /// editor's) can take per-instance world matrices. Only such LODs may use RenderInstanced.
+        /// </summary>
+        public bool AllSectionsFallback
+        {
+            get
+            {
+                foreach (MeshRenderSection section in sections)
+                {
+                    if (!section.IsFallback)
+                        return false;
+                }
+                return sections.Count > 0;
+            }
+        }
+
+        /// <summary>
+        /// Deferred pass only: draws <paramref name="instanceCount"/> copies of each renderable
+        /// section with one DrawIndexedInstanced call. The caller binds the per-instance data.
+        /// </summary>
+        public void RenderInstanced(D3D11.DeviceContext context, int instanceCount)
+        {
+            if (sections.Count == 0 || instanceCount <= 0)
+            {
+                return;
+            }
+
+            context.InputAssembler.SetIndexBuffer(indexBuffer, indexBufferFormat, 0);
+            foreach (MeshRenderSection section in sections)
+            {
+                if (!meshLod.IsSectionRenderable(section.MeshSection) || !section.IsVisible)
+                {
+                    continue;
+                }
+
+                section.SetState(context, MeshRenderPath.Deferred);
+                context.DrawIndexedInstanced(section.PrimitiveCount * 3, instanceCount, section.StartIndex, 0, 0);
+            }
+        }
+
         private void RebuildSection(RenderCreateState state, MeshRenderSection section, ShaderPermutation permutation, byte[] chunkData)
         {
             if (section.VertexBuffers != null)

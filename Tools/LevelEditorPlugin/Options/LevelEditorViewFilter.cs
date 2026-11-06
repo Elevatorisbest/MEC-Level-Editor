@@ -14,9 +14,17 @@ public static class LevelEditorViewFilter
     private const string KeyVolumes = "LevelEditorView_CollisionVolumes";
     private const string KeyLightCards = "LevelEditorView_EmissiveOnlyMeshes";
     private const string KeyIcons = "LevelEditorView_HelperIcons";
+    private const string KeyInstancing = "LevelEditorView_Instancing";
 
     // cached: read every frame for every visible proxy
-    private static bool? bloom, volumes, lightCards, icons;
+    private static bool? bloom, volumes, lightCards, icons, instancing;
+
+    /// <summary>Draw repeated meshes with one instanced draw (InstancedMeshBatcher). On by default.</summary>
+    public static bool Instancing
+    {
+        get => instancing ??= Config.Get(KeyInstancing, true, ConfigScope.Game);
+        set => Set(KeyInstancing, ref instancing, value);
+    }
 
     /// <summary>Bloom post-process (glow around bright pixels). Off by default.</summary>
     public static bool Bloom
@@ -33,10 +41,10 @@ public static class LevelEditorViewFilter
     }
 
     /// <summary>
-    /// Meshes whose materials only have emissive textures (e.g. Ground_Lights_01/02: distant city
-    /// light cards that cover the streets in the editor). Hidden by default.
+    /// Flat light cards (MeshRenderable.IsLightCard, e.g. Ground_Lights_01/02 that cover the streets
+    /// in the editor, light-strip decals). Hidden by default.
     /// </summary>
-    public static bool EmissiveOnlyMeshes
+    public static bool LightCards
     {
         get => lightCards ??= Config.Get(KeyLightCards, false, ConfigScope.Game);
         set => Set(KeyLightCards, ref lightCards, value);
@@ -60,7 +68,7 @@ public static class LevelEditorViewFilter
     public static bool HidesMesh(RenderProxy proxy)
     {
         if (proxy is ModelRenderProxy model)
-            return !EmissiveOnlyMeshes && model.MeshData != null && model.MeshData.IsEmissiveOnly;
+            return !LightCards && model.MeshData != null && model.MeshData.IsLightCard;
         if (proxy is SpriteRenderProxy sprite)
             return sprite.IsCollisionVolume && !CollisionVolumes;
         return false;

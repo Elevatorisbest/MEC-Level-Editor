@@ -91,6 +91,7 @@ public sealed class LoadReport
     private readonly List<SubWorldInfo> subWorlds = new List<SubWorldInfo>();
     private readonly List<string> missingAssets = new List<string>();
     private readonly List<string> emissiveOnlyMeshes = new List<string>();
+    private int lightCardMeshes;
     private int missingAssetCount;
     private readonly List<string> nameLookups = new List<string>();
     private readonly Dictionary<string, int> meshMaterialFailures = new Dictionary<string, int>();
@@ -315,11 +316,15 @@ public sealed class LoadReport
             Increment(r.unboundDataTypes, dataType.Name);
     }
 
-    /// <summary>A mesh resource whose materials only have emissive textures (hidden by default).</summary>
-    public void EmissiveOnlyMesh(string meshName)
+    /// <summary>A mesh resource whose materials only have emissive textures; light cards are hidden by default.</summary>
+    public void EmissiveOnlyMesh(string meshName, bool lightCard)
     {
         lock (sync)
-            emissiveOnlyMeshes.Add(meshName);
+        {
+            emissiveOnlyMeshes.Add((lightCard ? "hidden   " : "visible  ") + meshName);
+            if (lightCard)
+                lightCardMeshes++;
+        }
     }
 
     public static void MissingAsset(string description)
@@ -648,7 +653,7 @@ public sealed class LoadReport
                 sb.AppendLine("    " + e);
             sb.AppendLine();
 
-            sb.AppendLine($"Emissive-only meshes (light cards; hidden unless View > Emissive-only meshes is on): {emissiveOnlyMeshes.Count}");
+            sb.AppendLine($"Emissive-only meshes: {emissiveOnlyMeshes.Count}, of which {lightCardMeshes} flat light cards (hidden unless View > Light cards is on); the rest are drawn in their emissive texture's colour");
             foreach (string m in emissiveOnlyMeshes.OrderBy(x => x).Take(60))
                 sb.AppendLine("  " + m);
             if (emissiveOnlyMeshes.Count > 60)

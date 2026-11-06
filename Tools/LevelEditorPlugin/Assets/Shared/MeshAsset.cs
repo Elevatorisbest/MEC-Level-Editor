@@ -50,9 +50,9 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
             MeshData = new Render.MeshRenderable(state, meshSet, lodGroup.Data, materials, resEntry);
             MeshData.DebugMeshName = App.AssetManager.GetEbxEntry(FileGuid)?.Name;
             MeshData.DebugMaterials = materials;
-            MeshData.IsEmissiveOnly = IsEmissiveOnly(materials);
-            if (MeshData.IsEmissiveOnly)
-                LoadReport.Current?.EmissiveOnlyMesh(MeshData.DebugMeshName ?? FileGuid.ToString());
+            MeshData.IsLightCard = IsLightCard(materials, MeshData.DebugMeshName, out bool emissiveOnly);
+            if (emissiveOnly)
+                LoadReport.Current?.EmissiveOnlyMesh(MeshData.DebugMeshName ?? FileGuid.ToString(), MeshData.IsLightCard);
             LoadReport.MeshLoaded(
                 (System.Diagnostics.Stopwatch.GetTimestamp() - diagStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
                 MeshData.UseTexturedRendering,
@@ -62,16 +62,21 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
     }
 
     /// <summary>
-    /// True when the mesh has materials and all their textures are emissive (Emissive, EmissiveMask,
-    /// ...), with at least one of them: light cards that only glow in game.
+    /// <paramref name="emissiveOnly"/>: the mesh has materials and all their textures are emissive
+    /// (Emissive, EmissiveMask, ...). Such meshes are drawn in their emissive texture's colour.
+    /// Returns true (light card, hidden by default) only for the flat ones: all materials use a
+    /// ground-lights or decal shader, or the mesh is an "emissive plane". A real object that only
+    /// has an emissive texture (e.g. a turret, cables) stays visible.
     /// </summary>
-    private static bool IsEmissiveOnly(MeshMaterialCollection collection)
+    private static bool IsLightCard(MeshMaterialCollection collection, string meshName, out bool emissiveOnly)
     {
+        emissiveOnly = false;
         if (collection == null)
             return false;
         try
         {
             bool anyEmissive = false;
+            bool allCardShaders = true;
             int materialCount = 0;
             foreach (MeshMaterial material in collection)
             {
@@ -83,8 +88,20 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
                         return false;
                     anyEmissive = true;
                 }
+
+                string shader = material.Shader.Type == PointerRefType.External
+                    ? App.AssetManager.GetEbxEntry(material.Shader.External.FileGuid)?.Name ?? ""
+                    : "";
+                if (shader.IndexOf("Ground_Lights", StringComparison.OrdinalIgnoreCase) < 0
+                    && shader.IndexOf("Decal", StringComparison.OrdinalIgnoreCase) < 0)
+                    allCardShaders = false;
             }
-            return materialCount > 0 && anyEmissive;
+
+            emissiveOnly = materialCount > 0 && anyEmissive;
+            if (!emissiveOnly)
+                return false;
+            bool emissivePlane = meshName != null && meshName.IndexOf("emissiveplane", StringComparison.OrdinalIgnoreCase) >= 0;
+            return allCardShaders || emissivePlane;
         }
         catch (Exception)
         {

@@ -36,6 +36,8 @@ using System.Windows;
 // Mirror's Edge Catalyst mesh fallback pixel shader (replaces FrostyPlugin's built-in one; see
 // Shaders/MecMeshFallback.hlsl and the CompileMecShader target in the .csproj).
 [assembly: RegisterShader(ShaderType.PixelShader, "20160607", "LevelEditorPlugin.Shaders.MecMeshFallback.pso")]
+// Same vertex shader as Frosty's, plus optional per-instance world matrices (see Render/InstancedMeshBatcher.cs).
+[assembly: RegisterShader(ShaderType.VertexShader, "20160607", "LevelEditorPlugin.Shaders.MecMeshFallback.vso")]
 
 [assembly: RegisterAssetDefinition("LevelData", typeof(LevelDataAssetDefinition))]
 [assembly: RegisterAssetDefinition("DetachedSubWorldData", typeof(DetachedSubWorldDataAssetDefinition))]
