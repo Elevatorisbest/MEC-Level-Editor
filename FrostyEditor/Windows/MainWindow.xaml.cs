@@ -386,7 +386,9 @@ namespace FrostyEditor.Windows
             string editorModName = $"EditorMod{r.Next(1000, 9999):D4}.fbmod";
             LaunchButton.IsEnabled = false;
 
-            // get all mods
+            // get all mods (a fresh editor folder has no Mods/<profile> folder yet; enumerating a
+            // missing folder threw and crashed the editor on Launch / F5)
+            Directory.CreateDirectory($"Mods/{ProfilesLibrary.ProfileName}/");
             List<string> modPaths = Directory.EnumerateFiles($"Mods/{ProfilesLibrary.ProfileName}/", "*.fbmod", SearchOption.AllDirectories).Select(Path.GetFileName).ToList();
 
             // create temporary editor mod
