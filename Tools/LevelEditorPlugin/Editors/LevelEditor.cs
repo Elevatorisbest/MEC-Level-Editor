@@ -401,7 +401,7 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         List<ToolbarItem> toolbarItems = base.RegisterToolbarItems();
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide layers tab", "Images/Layers.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new LayersViewModel(this))), DockManager, "UID_LevelEditor_Layers"));
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide instances tab", "Images/Instances.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new InstancesViewModel(this, selectedEntity))), DockManager, "UID_LevelEditor_Instances"));
-        toolbarItems.Add(new DockingToolbarItem("", "Show/Hide toolbox", "Images/Toolbox.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new InstancesViewModel(this, selectedEntity))), DockManager, "UID_LevelEditor_Toolbox"));
+        toolbarItems.Add(new DockingToolbarItem("", "Show/Hide toolbox", "Images/Toolbox.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new LevelEditorToolboxViewModel())), DockManager, "UID_LevelEditor_Toolbox"));
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide properties tab", "Images/Properties.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new PropertiesViewModel(this, selectedEntity))), DockManager, "UID_LevelEditor_Properties"));
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide terrain layers tab", "Images/Terrain.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new TerrainLayersViewModel(this))), DockManager, "UID_LevelEditor_TerrainLayers"));
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide timeline editor", "Images/Timeline.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new TimelineViewModel(this))), DockManager, "UID_LevelEditor_Timeline"));
@@ -706,6 +706,13 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         }
     }
 
+    private void TimedDockLoad(LoadReport report, string name, Func<Controls.IDockableItem> create)
+    {
+        Stopwatch t = Stopwatch.StartNew();
+        DockManager.AddItemOnLoad(create());
+        report.AddTiming($"UI: {name}", t.Elapsed.TotalMilliseconds);
+    }
+
     protected override void Initialize()
     {
         Stopwatch timer = new Stopwatch();
@@ -734,7 +741,9 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
                 viewport.SetPaused(false);
                 editingWorld = refObj;
                 currentLoadingState = null;
+                Stopwatch initTimer = Stopwatch.StartNew();
                 world.Initialize();
+                report.AddTiming("world.Initialize (entity world setup)", initTimer.Elapsed.TotalMilliseconds);
             }
             catch (Exception ex)
             {
@@ -747,14 +756,16 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         timer.Stop();
         logger.Log($"Level loaded in {timer.Elapsed.ToString()}");
 
+        // Panels are created on the UI thread; the render phase cannot show its progress window
+        // until this finishes, so each panel is timed for the load report.
         // 让Layers在Instance后加载
-        DockManager.AddItemOnLoad(new InstancesViewModel(this, null));
-        DockManager.AddItemOnLoad(new LayersViewModel(this));
-        DockManager.AddItemOnLoad(new LevelEditorToolboxViewModel());
-        DockManager.AddItemOnLoad(new PropertiesViewModel(this, editingWorld));
-        DockManager.AddItemOnLoad(new TimelineViewModel(this));
-        DockManager.AddItemOnLoad(new TerrainLayersViewModel(this));
-        DockManager.AddItemOnLoad(new DiagnosticsViewModel());
+        TimedDockLoad(report, "Instances panel", () => new InstancesViewModel(this, null));
+        TimedDockLoad(report, "Layers panel", () => new LayersViewModel(this));
+        TimedDockLoad(report, "Toolbox panel", () => new LevelEditorToolboxViewModel());
+        TimedDockLoad(report, "Properties panel", () => new PropertiesViewModel(this, editingWorld));
+        TimedDockLoad(report, "Timeline panel", () => new TimelineViewModel(this));
+        TimedDockLoad(report, "Terrain layers panel", () => new TerrainLayersViewModel(this));
+        TimedDockLoad(report, "Diagnostics panel", () => new DiagnosticsViewModel());
         //DockManager.AddItemOnLoad(new SchematicsViewModel(this, rootLayer));
     }
 }

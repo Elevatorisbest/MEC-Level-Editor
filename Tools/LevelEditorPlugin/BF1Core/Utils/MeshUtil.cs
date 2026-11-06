@@ -11,6 +11,7 @@ using LevelEditorPlugin.Screens;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.BF1Core.Utils;
 
@@ -124,15 +125,18 @@ public static class MeshUtil
                     objectReference.Blueprint = staticModelGroupElementEntity.Data.Blueprint;
                     objectReference.ObjectVariation = staticModelGroupElementEntity.Data.ObjectVariation;
 
-                    CoreUtil.SetFrostyEnum(objectReference, "StreamRealm", "StreamRealm_None");
-                    CoreUtil.SetFrostyEnum(objectReference, "RadiosityTypeOverride", "RadiosityTypeOverride_None");
-                    objectReference.LightmapResolutionScale = 1u;
-                    objectReference.ForceSeparateEnlightenSystem = false;
-                    objectReference.CastSunShadowEnable = true;
-                    objectReference.CastReflectionEnable = true;
-                    objectReference.CastEnvmapEnable = true;
-                    objectReference.Excluded = false;
-                    CoreUtil.SetFrostyEnum(objectReference, "LocalPlayerId", "LocalPlayerId_Invalid");
+                    // These defaults were written for Battlefield 1. Each field is only set if the
+                    // game's ObjectReferenceObjectData has it (e.g. Mirror's Edge Catalyst has no
+                    // ForceSeparateEnlightenSystem, which used to throw here and abort the copy).
+                    SetEnumIfPresent(objectReference, "StreamRealm", "StreamRealm_None");
+                    SetEnumIfPresent(objectReference, "RadiosityTypeOverride", "RadiosityTypeOverride_None");
+                    SetIfPresent(objectReference, "LightmapResolutionScale", 1u);
+                    SetIfPresent(objectReference, "ForceSeparateEnlightenSystem", false);
+                    SetIfPresent(objectReference, "CastSunShadowEnable", true);
+                    SetIfPresent(objectReference, "CastReflectionEnable", true);
+                    SetIfPresent(objectReference, "CastEnvmapEnable", true);
+                    SetIfPresent(objectReference, "Excluded", false);
+                    SetEnumIfPresent(objectReference, "LocalPlayerId", "LocalPlayerId_Invalid");
                 }
             }
             else
@@ -221,6 +225,7 @@ public static class MeshUtil
         // 更新并保存修改
         ebxAsset.Update();
         App.AssetManager.ModifyEbx(ebxAssetEnity.Name, ebxAsset);
+        LevelEditorLog.Info("Copy", $"Copied {option.Entity.DisplayName} x{pointerRefList_CopyMesh.Count} into {ebxAssetEnity.Name} (network registries to update: {ebxAssetEnityList_NetReg.Count})");
 
         ///////////////////////////////////
 
@@ -275,6 +280,33 @@ public static class MeshUtil
             // 通知更新UI
             LayerReloaded?.Invoke();
         }
+    }
+
+    private static void SetIfPresent(object target, string propertyName, object value)
+    {
+        System.Reflection.PropertyInfo property = target.GetType().GetProperty(propertyName);
+        if (property == null || !property.CanWrite)
+        {
+            LevelEditorLog.Debug("Copy", $"{target.GetType().Name} has no writable property {propertyName}; skipped");
+            return;
+        }
+        property.SetValue(target, value);
+    }
+
+    private static void SetEnumIfPresent(object target, string propertyName, string enumValueName)
+    {
+        System.Reflection.PropertyInfo property = target.GetType().GetProperty(propertyName);
+        if (property == null || !property.CanWrite || !property.PropertyType.IsEnum)
+        {
+            LevelEditorLog.Debug("Copy", $"{target.GetType().Name} has no writable enum property {propertyName}; skipped");
+            return;
+        }
+        if (!Enum.IsDefined(property.PropertyType, enumValueName))
+        {
+            LevelEditorLog.Debug("Copy", $"{property.PropertyType.Name} has no value {enumValueName}; {propertyName} left at default");
+            return;
+        }
+        property.SetValue(target, Enum.Parse(property.PropertyType, enumValueName));
     }
 
     /// <summary>
@@ -364,6 +396,7 @@ public static class MeshUtil
 
         // 移除这个组件
         rootObject.Objects.Remove(targetItemRef);
+        LevelEditorLog.Info("Delete", $"Deleted {option.Entity.DisplayName} ({targetItemClassGuid}) from {ebxAssetEnity.Name}. Note: connections referencing it are not removed yet.");
         App.Logger.Log($"已删除组件 {targetItemClassGuid}，当前Objects数量：{rootObject.Objects.Count}");
 
         // 更新并保存修改

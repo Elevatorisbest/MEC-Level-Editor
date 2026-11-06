@@ -508,7 +508,7 @@ public abstract class Entity : INotifyPropertyChanged, IEbxType
 
     protected void ClearFlags(EntityFlags inFlags)
     {
-        flags ^= inFlags;
+        flags &= ~inFlags;
     }
 
     #region -- INotifyPropertyChanged --

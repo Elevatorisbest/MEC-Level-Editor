@@ -18,6 +18,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.BF1Core.Views;
 
@@ -91,6 +92,16 @@ public partial class MeshView : UserControl
 
         this.Dispatcher.Invoke(() =>
         {
+            // The hotkey poller reads the keyboard globally (GetAsyncKeyState). Ignore key
+            // presses made while another application has focus, otherwise e.g. F5 in a web
+            // browser would duplicate the selected mesh into the level.
+            if (!System.Linq.Enumerable.Any(System.Linq.Enumerable.OfType<Window>(Application.Current.Windows), w => w.IsActive))
+            {
+                LevelEditorLog.Info("Hotkey", $"{key} ignored: Frosty is not the active application");
+                return;
+            }
+
+            LevelEditorLog.Info("Hotkey", $"{key} pressed");
             switch (key)
             {
                 case Keys.F1:
@@ -431,6 +442,7 @@ public partial class MeshView : UserControl
         catch (Exception ex)
         {
             App.Logger.LogError($"Exception while copying model to camera: {ex.Message}");
+            LevelEditorLog.Error("Copy", "Exception while copying model to camera", ex);
         }
         finally
         {
@@ -477,6 +489,7 @@ public partial class MeshView : UserControl
         catch (Exception ex)
         {
             App.Logger.LogError($"Exception while deleting selected entity: {ex.Message}");
+            LevelEditorLog.Error("Delete", "Exception while deleting selected entity", ex);
         }
         finally
         {
@@ -921,6 +934,7 @@ public partial class MeshView : UserControl
         catch (Exception ex)
         {
             App.Logger.LogError($"Exception while copying selected mesh: {ex.Message}");
+            LevelEditorLog.Error("Copy", "Exception while copying selected mesh", ex);
         }
         finally
         {

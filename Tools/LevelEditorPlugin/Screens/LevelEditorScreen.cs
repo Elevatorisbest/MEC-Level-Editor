@@ -437,6 +437,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
                 throw;
             }
             proxies.AddRange(newProxies);
+            report?.SetTextureSummary(TextureLibraryStats.Summarize(state.TextureLibrary));
             report?.RenderFinished(newProxies);
         });
     }

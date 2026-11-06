@@ -110,6 +110,13 @@ public class SpatialPrefabEditor : SpatialEditor
         base.Closed();
     }
 
+    private void TimedDockLoad(LoadReport report, string name, System.Func<Controls.IDockableItem> create)
+    {
+        Stopwatch t = Stopwatch.StartNew();
+        DockManager.AddItemOnLoad(create());
+        report.AddTiming($"UI: {name}", t.Elapsed.TotalMilliseconds);
+    }
+
     protected override void Initialize()
     {
         Stopwatch timer = new Stopwatch();
@@ -150,7 +157,9 @@ public class SpatialPrefabEditor : SpatialEditor
             editingWorld = refObj;
             currentLoadingState = null;
 
+            Stopwatch initTimer = Stopwatch.StartNew();
             world.Initialize();
+            report.AddTiming("world.Initialize (entity world setup)", initTimer.Elapsed.TotalMilliseconds);
           }
           catch (System.Exception ex)
           {
@@ -165,11 +174,11 @@ public class SpatialPrefabEditor : SpatialEditor
         logger.Log($"Loaded spatial prefab in {timer.Elapsed.ToString()}");
 
         // 让Layers在Instance后加载
-        DockManager.AddItemOnLoad(new InstancesViewModel(this, null));
-        DockManager.AddItemOnLoad(new LayersViewModel(this));
-        DockManager.AddItemOnLoad(new PropertiesViewModel(this, editingWorld));
-        DockManager.AddItemOnLoad(new TimelineViewModel(this));
-        DockManager.AddItemOnLoad(new SchematicsViewModel(this, rootLayer));
-        DockManager.AddItemOnLoad(new DiagnosticsViewModel());
+        TimedDockLoad(report, "Instances panel", () => new InstancesViewModel(this, null));
+        TimedDockLoad(report, "Layers panel", () => new LayersViewModel(this));
+        TimedDockLoad(report, "Properties panel", () => new PropertiesViewModel(this, editingWorld));
+        TimedDockLoad(report, "Timeline panel", () => new TimelineViewModel(this));
+        TimedDockLoad(report, "Schematics panel", () => new SchematicsViewModel(this, rootLayer));
+        TimedDockLoad(report, "Diagnostics panel", () => new DiagnosticsViewModel());
     }
 }

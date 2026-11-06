@@ -175,7 +175,8 @@ public class ModelRenderProxy : RenderProxy
 
     public override void Dispose()
     {
-        renderData.Dispose();
+        // renderData is shared by every proxy using the same mesh and owned (and disposed) by
+        // MeshAsset, so it must not be disposed here.
         permutation.Dispose();
         pixelParameters.Dispose();
         pixelTextures.Clear();

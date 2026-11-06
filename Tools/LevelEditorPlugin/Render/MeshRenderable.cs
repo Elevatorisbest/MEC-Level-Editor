@@ -283,6 +283,11 @@ public class MeshRenderable : BaseRenderable
     public float[] LodDistances { get; private set; } = new float[6];
     public float CullScreenArea { get; private set; } = 0.0f;
 
+    /// <summary>Diagnostics: time spent building the untextured (position/normal) LODs.</summary>
+    public double UntexturedBuildMilliseconds { get; private set; }
+    /// <summary>Diagnostics: time spent building the textured MeshSetPlugin mesh, including texture loads.</summary>
+    public double TexturedBuildMilliseconds { get; private set; }
+
     /// <summary>
     /// 当材质加载成功时，使用 MeshSetPlugin 的带贴图渲染
     /// </summary>
@@ -299,6 +304,7 @@ public class MeshRenderable : BaseRenderable
         LodDistances[5] = lodGroup.Lod6Distance;
         CullScreenArea = lodGroup.CullScreenArea;
 
+        long diagStart = System.Diagnostics.Stopwatch.GetTimestamp();
         bool isHitProxyLod = true;
         foreach (MeshSetLod lod in meshSet.Lods)
         {
@@ -312,6 +318,9 @@ public class MeshRenderable : BaseRenderable
             new Vector3(meshSet.BoundingBox.min.x, meshSet.BoundingBox.min.y, meshSet.BoundingBox.min.z),
             new Vector3(meshSet.BoundingBox.max.x, meshSet.BoundingBox.max.y, meshSet.BoundingBox.max.z)
             );
+
+        long diagTextured = System.Diagnostics.Stopwatch.GetTimestamp();
+        UntexturedBuildMilliseconds = (diagTextured - diagStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 
         if (materials != null && materials.Count > 0 && meshResEntry != null)
         {
@@ -330,6 +339,8 @@ public class MeshRenderable : BaseRenderable
                 TexturedMesh = null;
             }
         }
+
+        TexturedBuildMilliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - diagTextured) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
     }
 
     public bool UseTexturedRendering => TexturedMesh != null;

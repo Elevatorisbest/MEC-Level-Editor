@@ -2,6 +2,7 @@ using Frosty.Core.Viewport;
 using LevelEditorPlugin.Managers;
 using LevelEditorPlugin.Render.Proxies;
 using System.Collections.Generic;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Entities;
 
@@ -41,6 +42,12 @@ public class StaticModelEntity : GamePhysicsEntity, IEntityData<FrostySdk.Ebx.St
 
     public override void CreateRenderProxy(List<RenderProxy> proxies, RenderCreateState state)
     {
+        if (Mesh == null)
+        {
+            LoadReport.MissingAsset($"mesh of {GetType().Name} {InstanceGuid} (Mesh reference is null or not found)");
+            return;
+        }
+
         Mesh.LoadResource(state);
         proxies.Add(new ModelRenderProxy(state, this));
 
@@ -50,5 +57,6 @@ public class StaticModelEntity : GamePhysicsEntity, IEntityData<FrostySdk.Ebx.St
     public override void Destroy()
     {
         LoadedAssetManager.Instance.UnloadAsset(Mesh);
+        base.Destroy();
     }
 }

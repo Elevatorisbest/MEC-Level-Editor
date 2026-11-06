@@ -67,6 +67,8 @@ public sealed class LoadReport
     private bool entityDone;
     private bool renderDone;
     private bool finished;
+    private long entityEndedAt;
+    private long renderStartedAt;
 
     public string AssetName { get; }
     public string AssetType { get; }
@@ -106,6 +108,10 @@ public sealed class LoadReport
     private int meshesTextured;
     private int meshesUntextured;
     private double meshLoadMilliseconds;
+    private double meshUntexturedMilliseconds;
+    private double meshTexturedMilliseconds;
+    private string textureSummary;
+    private readonly List<string> timings = new List<string>();
     private int totalProxies;
 
     private LoadReport(string assetName, string assetType)
@@ -141,6 +147,7 @@ public sealed class LoadReport
                 return;
             entityDone = true;
             entityTimer.Stop();
+            entityEndedAt = Stopwatch.GetTimestamp();
             memoryAfterEntities = Memory.Capture();
             if (!succeeded)
                 Failed = true;
@@ -161,6 +168,7 @@ public sealed class LoadReport
             if (renderTimer.IsRunning || renderDone)
                 return;
             renderTimer.Start();
+            renderStartedAt = Stopwatch.GetTimestamp();
         }
         LevelEditorLog.Info("Load", "Render phase started (creating render proxies, meshes and textures)");
     }
@@ -327,7 +335,7 @@ public sealed class LoadReport
         }
     }
 
-    public static void MeshLoaded(double milliseconds, bool textured)
+    public static void MeshLoaded(double milliseconds, bool textured, double untexturedMs, double texturedMs)
     {
         LoadReport r = Current;
         if (r == null)
@@ -336,9 +344,36 @@ public sealed class LoadReport
         {
             r.meshesLoaded++;
             r.meshLoadMilliseconds += milliseconds;
+            r.meshUntexturedMilliseconds += untexturedMs;
+            r.meshTexturedMilliseconds += texturedMs;
             if (textured) r.meshesTextured++;
             else r.meshesUntextured++;
         }
+    }
+
+    /// <summary>Texture library summary, set at the end of the render phase.</summary>
+    public void SetTextureSummary(string summary)
+    {
+        lock (sync)
+            textureSummary = summary;
+    }
+
+    /// <summary>
+    /// Adds a named timing. If the report was already written (e.g. UI setup that finishes after
+    /// the render phase), the timing goes to the log as a separate line instead.
+    /// </summary>
+    public void AddTiming(string name, double milliseconds)
+    {
+        string line = $"{name}: {Seconds(milliseconds)}";
+        bool alreadyWritten;
+        lock (sync)
+        {
+            alreadyWritten = finished;
+            if (!alreadyWritten)
+                timings.Add(line);
+        }
+        if (alreadyWritten)
+            LevelEditorLog.Info("Load", $"{AssetName}: {line} (after the load report was written)");
     }
 
     public static void MeshMaterialFailure(string stage, Exception ex)
@@ -407,7 +442,11 @@ public sealed class LoadReport
             sb.AppendLine($"Result:           {(Failed ? "FAILED (see exceptions below / log)" : "loaded")}");
             sb.AppendLine($"Entity phase:     {Seconds(entityMs)}   (\"Loading ...\" window: read ebx, build entities)");
             sb.AppendLine($"Render phase:     {Seconds(renderMs)}   (\"Preparing scene\" window: meshes, textures, proxies)");
-            sb.AppendLine($"Total:            {Seconds(entityMs + renderMs)}");
+            double gapMs = (entityEndedAt != 0 && renderStartedAt > entityEndedAt)
+                ? (renderStartedAt - entityEndedAt) * 1000.0 / Stopwatch.Frequency
+                : 0.0;
+            sb.AppendLine($"Between phases:   {Seconds(gapMs)}   (UI thread busy: world setup and panels, see \"Other timings\")");
+            sb.AppendLine($"Total:            {Seconds(entityMs + gapMs + renderMs)}");
             sb.AppendLine();
             sb.AppendLine("Memory");
             sb.AppendLine($"  at start:         {memoryAtStart}");
@@ -439,6 +478,10 @@ public sealed class LoadReport
 
             sb.AppendLine("Meshes");
             sb.AppendLine($"  mesh resources loaded: {meshesLoaded} ({meshesTextured} with textured path, {meshesUntextured} untextured only), total mesh load time {Seconds(meshLoadMilliseconds)}");
+            sb.AppendLine($"    building untextured LODs (position/normal + picking copy): {Seconds(meshUntexturedMilliseconds)}");
+            sb.AppendLine($"    building textured mesh (second copy of geometry + material textures): {Seconds(meshTexturedMilliseconds)}");
+            sb.AppendLine($"    other (reading the mesh resource, materials): {Seconds(Math.Max(0, meshLoadMilliseconds - meshUntexturedMilliseconds - meshTexturedMilliseconds))}");
+            sb.AppendLine($"  textures: {textureSummary ?? "n/a"}");
             if (meshMaterialFailures.Count > 0)
             {
                 sb.AppendLine("  textured path failures (count, reason):");
@@ -461,6 +504,14 @@ public sealed class LoadReport
             if (nameLookups.Count > 80)
                 sb.AppendLine($"  ... {nameLookups.Count - 80} more");
             sb.AppendLine();
+
+            if (timings.Count > 0)
+            {
+                sb.AppendLine("Other timings");
+                foreach (string t in timings)
+                    sb.AppendLine("  " + t);
+                sb.AppendLine();
+            }
 
             sb.AppendLine($"Exceptions during load: {exceptionCount}");
             foreach (string e in exceptions)
