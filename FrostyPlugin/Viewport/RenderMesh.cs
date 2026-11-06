@@ -100,6 +100,11 @@ namespace Frosty.Core.Viewport
         public float BoneWeights6;
         public float BoneWeights7;
         public uint TangentSpace;
+        /// <summary>
+        /// Texture array layer + 1 from the mesh's SubMaterialIndex element (0 = mesh has none).
+        /// Used by the MEC fallback shader for TA_ (texture array) materials.
+        /// </summary>
+        public float ArraySlice;
     }
 
     public enum ShaderParameterType
@@ -557,9 +562,11 @@ namespace Frosty.Core.Viewport
         /// </summary>
         private static float MecFinishMaterial(string shaderName, bool hasDiffuse, ShaderResourceView normal, bool hasRsm,
             Vector2 tiling, float detailTiling, float detailStrength, ShaderResourceView detailNormal,
-            List<Vector4> additionalParams, List<ShaderResourceView> additionalTextures)
+            List<Vector4> additionalParams, List<ShaderResourceView> additionalTextures,
+            ShaderResourceView diffuseArray, ShaderResourceView normalArray, ShaderResourceView rsmArray, ShaderResourceView colorMul)
         {
             const int AlphaTest = 1, Discard = 2, NormalHasRS = 4, DetailNormal = 8;
+            const int DiffuseArray = 16, NormalArray = 32, RsmArray = 64, ColorMul = 128;
             int flags = 0;
 
             if (shaderName.IndexOf("Invisible", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -587,7 +594,15 @@ namespace Frosty.Core.Viewport
 
             additionalParams.Add(new Vector4(tiling.X, tiling.Y, 0.0f, 0.0f));
             additionalParams.Add(new Vector4(detailTiling, detailStrength, 0.0f, 0.0f));
-            additionalTextures.Add(detailNormal);
+            additionalTextures.Add(detailNormal);   // t5
+            additionalTextures.Add(diffuseArray);   // t6
+            additionalTextures.Add(normalArray);    // t7
+            additionalTextures.Add(rsmArray);       // t8
+            additionalTextures.Add(colorMul);       // t9
+            if (diffuseArray != null) { flags |= DiffuseArray; MecFallbackStats.Count("colour texture is an array (TA_)"); }
+            if (normalArray != null) { flags |= NormalArray; MecFallbackStats.Count("normal map is an array (TA_)"); }
+            if (rsmArray != null) { flags |= RsmArray; MecFallbackStats.Count("RSM is an array (TA_)"); }
+            if (colorMul != null) { flags |= ColorMul; MecFallbackStats.Count("ColorTextureMul applied"); }
 
             MecFallbackStats.Count("normal map format " + normalFormat);
             if ((flags & Discard) != 0) MecFallbackStats.Count("hidden (Invisible shader)");
@@ -598,6 +613,11 @@ namespace Frosty.Core.Viewport
             if (tiling != Vector2.One) MecFallbackStats.Count("Tiling not 1");
 
             return flags;
+        }
+
+        private static bool IsTextureArray(ShaderResourceView srv)
+        {
+            return srv != null && srv.Description.Dimension == SharpDX.Direct3D.ShaderResourceViewDimension.Texture2DArray;
         }
 
         public void AssignFallbackParameters(RenderCreateState state, /*MeshRenderSection*/ dynamic section, MeshMaterial material)
@@ -638,6 +658,8 @@ namespace Frosty.Core.Viewport
             ShaderResourceView mecDetailNormal = null;
             // MEC: emissive texture/colour, used as the colour of glow-only materials
             PointerRef? mecEmissiveTexture = null;
+            // MEC: colour multiplier texture (SS_BuildingArray_TextureColorInput: a colour swatch)
+            ShaderResourceView mecColorMul = null;
             Vector4? mecEmissiveColor = null;
 
             // vector params
@@ -884,6 +906,10 @@ namespace Frosty.Core.Viewport
                     else if (paramName.Equals("Emissive") && mecEmissiveTexture == null)
                     {
                         mecEmissiveTexture = value;
+                    }
+                    else if (paramName.Equals("ColorTextureMul") && mecColorMul == null)
+                    {
+                        mecColorMul = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid);
                     }
                 }
 
@@ -1266,8 +1292,18 @@ namespace Frosty.Core.Viewport
             }
 
             if (ProfilesLibrary.IsLoaded(ProfileVersion.MirrorsEdgeCatalyst))
-                CustomParam3 = MecFinishMaterial(shaderAsset.Name, mecDiffuseScore > 0, NormTexture, mecRsmScore > 0,
-                    mecTiling, mecDetailTiling, mecDetailStrength, mecDetailNormal, AdditionalParams, AdditionalTextures);
+            {
+                // TA_ textures are texture arrays (one layer per building module etc.). They go to
+                // the shader's array slots; the 2D slots get the defaults.
+                ShaderResourceView diffuseArray = null, normalArray = null, rsmArray = null;
+                if (IsTextureArray(DiffuseTexture)) { diffuseArray = DiffuseTexture; DiffuseTexture = null; }
+                if (IsTextureArray(NormTexture)) { normalArray = NormTexture; NormTexture = null; }
+                if (IsTextureArray(MaskTexture)) { rsmArray = MaskTexture; MaskTexture = null; }
+
+                CustomParam3 = MecFinishMaterial(shaderAsset.Name, mecDiffuseScore > 0, NormTexture ?? normalArray, mecRsmScore > 0,
+                    mecTiling, mecDetailTiling, mecDetailStrength, mecDetailNormal, AdditionalParams, AdditionalTextures,
+                    diffuseArray, normalArray, rsmArray, mecColorMul);
+            }
 
             if (DiffuseTexture == null)
             {
@@ -1393,7 +1429,8 @@ namespace Frosty.Core.Viewport
                 new InputElement("BLENDINDICES", 1, SharpDX.DXGI.Format.R32G32B32A32_UInt, 0),
                 new InputElement("BLENDWEIGHT", 0, SharpDX.DXGI.Format.R32G32B32A32_Float, 0),
                 new InputElement("BLENDWEIGHT", 1, SharpDX.DXGI.Format.R32G32B32A32_Float, 0),
-                new InputElement("TANGENTSPACE", 0, SharpDX.DXGI.Format.R32_UInt, 0)
+                new InputElement("TANGENTSPACE", 0, SharpDX.DXGI.Format.R32_UInt, 0),
+                new InputElement("TEXCOORD", 3, SharpDX.DXGI.Format.R32_Float, 0)
             });
             perm.IsFallback = true;
             perm.IsSkinned = true;

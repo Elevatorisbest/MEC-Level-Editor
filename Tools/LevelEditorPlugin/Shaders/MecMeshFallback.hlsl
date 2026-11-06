@@ -29,6 +29,7 @@ struct PS_IN
     float4 Color0 : COLOR0;
     float4 Color1 : COLOR1;
     float3x3 TBN : TANGENTBASIS;
+    float ArraySlice : TEXCOORD3;      // texture array layer + 1 (0 = none)
 };
 
 struct PS_OUT
@@ -66,6 +67,17 @@ cbuffer functionConstants : register(b1)
 #define MEC_FLAG_DISCARD        2
 #define MEC_FLAG_NORMAL_HAS_RS  4
 #define MEC_FLAG_DETAIL_NORMAL  8
+#define MEC_FLAG_DIFFUSE_ARRAY  16
+#define MEC_FLAG_NORMAL_ARRAY   32
+#define MEC_FLAG_RSM_ARRAY      64
+#define MEC_FLAG_COLOR_MUL      128
+
+// Where the texture array layer comes from (level editor view option; 0 when not bound).
+cbuffer mecViewOptions : register(b5)
+{
+    uint ArrayLayerMode;
+    uint3 mecViewPadding;
+};
 
 cbuffer MaterialConstants : register(b2)
 {
@@ -88,9 +100,32 @@ Texture2D<float4> texture_NRS : register(t2);
 Texture2D<float4> texture_RSM : register(t3);
 Texture2D<float4> texture_Ex : register(t4);
 Texture2D<float4> texture_NormalDetail : register(t5);
+Texture2DArray<float4> texture_DiffuseArray : register(t6);
+Texture2DArray<float4> texture_NormalArray : register(t7);
+Texture2DArray<float4> texture_RSMArray : register(t8);
+Texture2D<float4> texture_ColorMul : register(t9);
 
 SamplerState sampler0_s : register(s0);
 SamplerState sampler1_s : register(s1);
+
+// Layer for TA_ (texture array) materials. Mode 0 (default): SubMaterialIndex when the mesh has
+// one, otherwise layer 0. The other modes exist to find out which vertex data MEC uses.
+float ArrayLayer(PS_IN In)
+{
+    switch (ArrayLayerMode)
+    {
+        case 1: return In.ArraySlice - 1.0f;
+        case 2: return In.TexCoord1.x;
+        case 3: return In.TexCoord1.y;
+        case 4: return In.TexCoord2.x;
+        case 5: return In.TexCoord2.y;
+        case 6: return In.Color0.r * 255.0f;
+        case 7: return In.Color0.a * 255.0f;
+        case 8: return floor(In.TexCoord0.x);
+        case 9: return floor(In.TexCoord0.y);
+        default: return (In.ArraySlice > 0.5f) ? In.ArraySlice - 1.0f : 0.0f;
+    }
+}
 
 float3 SafeDeriveNormalZ(float2 n)
 {
@@ -114,13 +149,20 @@ PS_OUT PS_MeshFallback(PS_IN In)
     float hasDiffuseTexture = TintColorA.w;
     float hasDiffuseColor = TintColorB.z;
 
-    float4 Diffuse = texture_Diffuse.Sample(sampler1_s, uv);
+    float layer = ArrayLayer(In);
+    float4 Diffuse = (flags & MEC_FLAG_DIFFUSE_ARRAY)
+        ? texture_DiffuseArray.Sample(sampler1_s, float3(uv, layer))
+        : texture_Diffuse.Sample(sampler1_s, uv);
     bool alphaTest = (flags & MEC_FLAG_ALPHATEST) != 0 && hasDiffuseTexture > 0.5f;
     if (alphaTest)
         clip(Diffuse.a - 0.5f);
 
-    float4 NRS = texture_NRS.Sample(sampler1_s, uv);
-    float4 RSM = texture_RSM.Sample(sampler1_s, uv);
+    float4 NRS = (flags & MEC_FLAG_NORMAL_ARRAY)
+        ? texture_NormalArray.Sample(sampler1_s, float3(uv, layer))
+        : texture_NRS.Sample(sampler1_s, uv);
+    float4 RSM = (flags & MEC_FLAG_RSM_ARRAY)
+        ? texture_RSMArray.Sample(sampler1_s, float3(uv, layer))
+        : texture_RSM.Sample(sampler1_s, uv);
     float4 Ex = texture_Ex.Sample(sampler1_s, uv);
 
     float3 n = SafeDeriveNormalZ(NRS.xy * 2.0f - 1.0f);
@@ -152,6 +194,9 @@ PS_OUT PS_MeshFallback(PS_IN In)
 
     float3 tint = lerp(float3(1, 1, 1), TintColorA.rgb, hasDiffuseColor);
     float3 baseColor = lerp(float3(1, 1, 1), Diffuse.rgb, hasDiffuseTexture) * tint;
+    // ColorTextureMul (e.g. a colour swatch on SS_BuildingArray_TextureColorInput)
+    if (flags & MEC_FLAG_COLOR_MUL)
+        baseColor *= texture_ColorMul.Sample(sampler1_s, uv).rgb;
     // Diffuse alpha is used as AO for opaque materials (as in Frosty's MEC path); for alpha-tested
     // materials it is the cut-out mask instead.
     float ao = (hasDiffuseTexture > 0.5f && !alphaTest) ? Diffuse.a : 1.0f;

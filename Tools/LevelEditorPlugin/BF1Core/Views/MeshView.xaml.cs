@@ -65,6 +65,9 @@ public partial class MeshView : UserControl
         ComboBox_ViewMode.ItemsSource = ViewModeItems;
         ComboBox_ViewMode.SelectedIndex = Math.Min(LevelEditorRenderingOptions.ViewModeIndex, ViewModeItems.Length - 1);
 
+        ComboBox_ArrayLayer.ItemsSource = LevelEditorViewFilter.ArrayLayerModeNames;
+        ComboBox_ArrayLayer.SelectedIndex = Math.Max(0, Math.Min(LevelEditorViewFilter.ArrayLayerMode, LevelEditorViewFilter.ArrayLayerModeNames.Length - 1));
+
         CheckBox_Bloom.IsChecked = LevelEditorViewFilter.Bloom;
         CheckBox_CollisionVolumes.IsChecked = LevelEditorViewFilter.CollisionVolumes;
         CheckBox_EmissiveOnly.IsChecked = LevelEditorViewFilter.LightCards;
@@ -79,6 +82,12 @@ public partial class MeshView : UserControl
     private void OnPendingCommitChanged()
     {
         Dispatcher.InvokeAsync(UpdateWriteHavokButtonState);
+    }
+
+    private void ComboBox_ArrayLayer_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (ComboBox_ArrayLayer.SelectedIndex >= 0)
+            LevelEditorViewFilter.ArrayLayerMode = ComboBox_ArrayLayer.SelectedIndex;
     }
 
     private void ViewFilter_Click(object sender, RoutedEventArgs e)

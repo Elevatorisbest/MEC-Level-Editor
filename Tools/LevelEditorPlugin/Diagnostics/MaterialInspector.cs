@@ -51,6 +51,8 @@ public static class MaterialInspector
             return sb.ToString().TrimEnd();
         }
 
+        DescribeSections(mesh, sb);
+
         int index = 0;
         foreach (MeshMaterial material in mesh.DebugMaterials)
         {
@@ -79,6 +81,47 @@ public static class MaterialInspector
             }
         }
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Vertex data and bound textures of each LOD0 section (texture array investigation).</summary>
+    private static void DescribeSections(MeshRenderable mesh, StringBuilder sb)
+    {
+        try
+        {
+            MeshSetPlugin.Render.MeshRenderLod lod = mesh.TexturedMesh?.GetLod(0);
+            if (lod == null)
+                return;
+            int i = 0;
+            foreach (MeshSetPlugin.Render.MeshRenderSection section in lod.Sections)
+            {
+                List<string> elements = new List<string>();
+                foreach (FrostySdk.GeometryDeclarationDesc.Element element in section.MeshSection.GeometryDeclDesc[0].Elements)
+                {
+                    if (element.Usage != FrostySdk.VertexElementUsage.Unknown)
+                        elements.Add($"{element.Usage}:{element.Format}");
+                }
+                sb.AppendLine($"Section {i++}: material {section.MeshSection.MaterialId}, {section.MeshSection.VertexCount} vertices, vertex data: {string.Join(", ", elements)}");
+
+                List<string> textures = new List<string>();
+                int slot = 1;
+                foreach (SharpDX.Direct3D11.ShaderResourceView srv in section.PixelTextures)
+                {
+                    if (srv != null)
+                    {
+                        var d = srv.Description;
+                        string shape = d.Dimension == SharpDX.Direct3D.ShaderResourceViewDimension.Texture2DArray
+                            ? $"array of {d.Texture2DArray.ArraySize}" : d.Dimension.ToString();
+                        textures.Add($"t{slot}={shape} {d.Format}");
+                    }
+                    slot++;
+                }
+                sb.AppendLine($"    bound textures: {string.Join(", ", textures)}");
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"Sections: could not read ({ex.GetType().Name}: {ex.Message})");
+        }
     }
 
     private static string ShaderName(MeshMaterial material)

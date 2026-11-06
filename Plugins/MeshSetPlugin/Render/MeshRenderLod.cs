@@ -651,6 +651,35 @@ namespace MeshSetPlugin.Render
                                 vertex.BoneWeights6 = reader.ReadByte() / 255.0f;
                                 vertex.BoneWeights7 = reader.ReadByte() / 255.0f;
                             }
+                            else if (element.Usage == VertexElementUsage.SubMaterialIndex)
+                            {
+                                // first component only; stored +1 so that 0 means "no index"
+                                long start = reader.Position;
+                                float index = -1.0f;
+                                switch (element.Format)
+                                {
+                                    case VertexElementFormat.Float:
+                                    case VertexElementFormat.Float2:
+                                    case VertexElementFormat.Float3:
+                                    case VertexElementFormat.Float4: index = reader.ReadFloat(); break;
+                                    case VertexElementFormat.Half:
+                                    case VertexElementFormat.Half2:
+                                    case VertexElementFormat.Half3:
+                                    case VertexElementFormat.Half4: index = HalfUtils.Unpack(reader.ReadUShort()); break;
+                                    case VertexElementFormat.Short:
+                                    case VertexElementFormat.Short2:
+                                    case VertexElementFormat.Short4:
+                                    case VertexElementFormat.UShort2:
+                                    case VertexElementFormat.UShort4: index = reader.ReadUShort(); break;
+                                    case VertexElementFormat.Int:
+                                    case VertexElementFormat.UInt:
+                                    case VertexElementFormat.Int2:
+                                    case VertexElementFormat.UInt2: index = reader.ReadUInt(); break;
+                                    default: index = reader.ReadByte(); break;
+                                }
+                                vertex.ArraySlice = index + 1.0f;
+                                reader.Position = start + element.Size;
+                            }
                             else
                             {
                                 reader.Position += element.Size;

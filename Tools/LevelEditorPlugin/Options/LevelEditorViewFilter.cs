@@ -15,6 +15,38 @@ public static class LevelEditorViewFilter
     private const string KeyLightCards = "LevelEditorView_EmissiveOnlyMeshes";
     private const string KeyIcons = "LevelEditorView_HelperIcons";
     private const string KeyInstancing = "LevelEditorView_Instancing";
+    private const string KeyArrayLayerMode = "LevelEditorView_ArrayLayerMode";
+
+    /// <summary>
+    /// Names for ArrayLayerMode (index = mode, see MecMeshFallback.hlsl ArrayLayer). Temporary,
+    /// to find out which vertex data selects the layer of TA_ texture arrays on MEC.
+    /// </summary>
+    public static readonly string[] ArrayLayerModeNames =
+    {
+        "Auto (SubMaterialIndex, else 0)",
+        "SubMaterialIndex",
+        "UV1 X",
+        "UV1 Y",
+        "UV2 X",
+        "UV2 Y",
+        "Vertex colour R",
+        "Vertex colour A",
+        "UV0 X whole number",
+        "UV0 Y whole number",
+    };
+
+    private static int? arrayLayerMode;
+
+    public static int ArrayLayerMode
+    {
+        get => arrayLayerMode ??= Config.Get(KeyArrayLayerMode, 0, ConfigScope.Game);
+        set
+        {
+            arrayLayerMode = value;
+            Config.Add(KeyArrayLayerMode, value, ConfigScope.Game);
+            Config.Save();
+        }
+    }
 
     // cached: read every frame for every visible proxy
     private static bool? bloom, volumes, lightCards, icons, instancing;

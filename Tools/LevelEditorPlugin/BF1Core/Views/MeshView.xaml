@@ -34,6 +34,18 @@
                             MinWidth="120"
                             SelectionChanged="ComboBox_ViewMode_SelectionChanged" />
                     </DockPanel>
+                    <DockPanel Margin="3">
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            FontWeight="Bold"
+                            Text="Array layer:"
+                            ToolTip="Temporary: which vertex data picks the layer of TA_ texture array materials (building modules). Try each on a building that looks wrong." />
+                        <ComboBox
+                            x:Name="ComboBox_ArrayLayer"
+                            MinWidth="120"
+                            SelectionChanged="ComboBox_ArrayLayer_SelectionChanged" />
+                    </DockPanel>
                     <CheckBox
                         x:Name="CheckBox_Bloom"
                         Margin="3"

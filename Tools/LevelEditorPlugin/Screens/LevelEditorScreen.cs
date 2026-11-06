@@ -646,6 +646,8 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         SolidColorMeshWrapper.DisposeSharedState();
         instanceBatcher.Dispose();
+        mecViewOptions?.Dispose();
+        mecViewOptions = null;
     }
 
     public override void CreateBuffers()
@@ -964,6 +966,13 @@ public class LevelEditorScreen : DeferredRenderScreen2
                 frameStats.Sorted(ElapsedMs(diagSortStart));
 
                 long diagDrawStart = System.Diagnostics.Stopwatch.GetTimestamp();
+
+                // MEC fallback shader view options (b5): texture array layer source
+                if (mecViewOptions == null)
+                    mecViewOptions = new ConstantBuffer<MecViewOptions>(Viewport.Device, new MecViewOptions());
+                mecViewOptions.UpdateData(Viewport.Context, new MecViewOptions { ArrayLayerMode = (uint)LevelEditorViewFilter.ArrayLayerMode });
+                Viewport.Context.PixelShader.SetConstantBuffer(5, mecViewOptions.Buffer);
+
                 foreach (MeshRenderInstance mesh in meshList)
                 {
                     D3DUtils.BeginPerfEvent(Viewport.Context, mesh.RenderMesh.DebugName);
@@ -1375,6 +1384,13 @@ public class LevelEditorScreen : DeferredRenderScreen2
     private static bool gpuInfoLogged;
     private readonly FrameStats frameStats = new FrameStats("Level editor viewport");
     private readonly InstancedMeshBatcher instanceBatcher = new InstancedMeshBatcher();
+
+    private struct MecViewOptions
+    {
+        public uint ArrayLayerMode;
+        public uint Padding0, Padding1, Padding2;
+    }
+    private ConstantBuffer<MecViewOptions> mecViewOptions;
 
     private static string QueryGpuMemory(SharpDX.Direct3D11.Device device)
     {
