@@ -527,7 +527,7 @@ namespace Frosty.Core.Viewport
             if (name.StartsWith("Diffuse")) return 4;                      // DiffuseWalkway, Diffuse_AO
             if (name.StartsWith("Material01Diffuse")) return 3;
             if (name.Contains("Diffuse")) return 2;                        // Material02Diffuse, XY_Diffuse
-            if (name.Equals("_D") || name.Equals("D")) return 1;
+            if (name.Equals("_D") || name.Equals("D") || name.Equals("DecalTexture")) return 1;
             return 0;
         }
 
@@ -537,8 +537,7 @@ namespace Frosty.Core.Viewport
             if (name.StartsWith("Normal") && !name.StartsWith("NormalDetail")) return 4;   // NormalWalkway
             if (name.StartsWith("Material01NormalMap")) return 3;
             if (name.Contains("NormalMap")) return 2;                      // Material02NormalMap, Tiles_NormalMap
-            if (name.StartsWith("NormalDetail")) return 1;                 // detail normal only if nothing else
-            return 0;
+            return 0;                                                      // NormalDetail has its own slot (t5)
         }
 
         private static int MecRsmScore(string name)
@@ -548,6 +547,57 @@ namespace Frosty.Core.Viewport
             if (name.StartsWith("Material01RSM")) return 2;
             if (name.StartsWith("RSM") || name.EndsWith("RSM")) return 1;  // RSMWalkway, Material02RSM
             return 0;
+        }
+
+        /// <summary>
+        /// MEC: flags and extra constants/textures for the level editor plugin's MEC fallback pixel
+        /// shader (Tools/LevelEditorPlugin/Shaders/MecMeshFallback.hlsl). Frosty's built-in MEC shader
+        /// ignores the extra data, so this is safe if the plugin shader is not loaded.
+        /// Returns the flags value (CustomParam3).
+        /// </summary>
+        private static float MecFinishMaterial(string shaderName, bool hasDiffuse, ShaderResourceView normal, bool hasRsm,
+            Vector2 tiling, float detailTiling, float detailStrength, ShaderResourceView detailNormal,
+            List<Vector4> additionalParams, List<ShaderResourceView> additionalTextures)
+        {
+            const int AlphaTest = 1, Discard = 2, NormalHasRS = 4, DetailNormal = 8;
+            int flags = 0;
+
+            if (shaderName.IndexOf("Invisible", StringComparison.OrdinalIgnoreCase) >= 0)
+                flags |= Discard;
+            else if (hasDiffuse && (shaderName.IndexOf("AlphaTest", StringComparison.OrdinalIgnoreCase) >= 0
+                || shaderName.IndexOf("Decal", StringComparison.OrdinalIgnoreCase) >= 0
+                || shaderName.EndsWith("_Alpha", StringComparison.OrdinalIgnoreCase)))
+                flags |= AlphaTest;
+
+            string normalFormat = "none";
+            if (normal != null)
+            {
+                SharpDX.DXGI.Format format = normal.Description.Format;
+                normalFormat = format.ToString();
+                // two-channel formats (BC5) and BC1 (1-bit alpha) do not carry reflectance/smoothness
+                bool hasZw = format == SharpDX.DXGI.Format.BC3_UNorm || format == SharpDX.DXGI.Format.BC3_UNorm_SRgb
+                    || format == SharpDX.DXGI.Format.BC7_UNorm || format == SharpDX.DXGI.Format.BC7_UNorm_SRgb
+                    || format == SharpDX.DXGI.Format.R8G8B8A8_UNorm || format == SharpDX.DXGI.Format.B8G8R8A8_UNorm;
+                if (hasZw && !hasRsm)
+                    flags |= NormalHasRS;
+            }
+
+            if (detailNormal != null && detailStrength > 0.0f)
+                flags |= DetailNormal;
+
+            additionalParams.Add(new Vector4(tiling.X, tiling.Y, 0.0f, 0.0f));
+            additionalParams.Add(new Vector4(detailTiling, detailStrength, 0.0f, 0.0f));
+            additionalTextures.Add(detailNormal);
+
+            MecFallbackStats.Count("normal map format " + normalFormat);
+            if ((flags & Discard) != 0) MecFallbackStats.Count("hidden (Invisible shader)");
+            if ((flags & AlphaTest) != 0) MecFallbackStats.Count("alpha tested");
+            if ((flags & NormalHasRS) != 0) MecFallbackStats.Count("smoothness from normal map z/w (no RSM)");
+            if (!hasRsm && (flags & NormalHasRS) == 0) MecFallbackStats.Count("no RSM: default smoothness");
+            if ((flags & DetailNormal) != 0) MecFallbackStats.Count("detail normal map");
+            if (tiling != Vector2.One) MecFallbackStats.Count("Tiling not 1");
+
+            return flags;
         }
 
         public void AssignFallbackParameters(RenderCreateState state, /*MeshRenderSection*/ dynamic section, MeshMaterial material)
@@ -582,6 +632,10 @@ namespace Frosty.Core.Viewport
             // MEC: other colour hints, used only when a material has neither a colour texture nor DiffuseColor
             Vector4? mecAltColor = null;
             Vector4? mecAbsorbtionColor = null;
+            // MEC: base UV tiling and the detail normal map (own texture slot in the plugin's MEC shader)
+            Vector2 mecTiling = Vector2.One;
+            float mecDetailTiling = 1.0f, mecDetailStrength = 1.0f;
+            ShaderResourceView mecDetailNormal = null;
 
             // vector params
             foreach (dynamic vectorParam in material.VectorParameters)
@@ -663,10 +717,19 @@ namespace Frosty.Core.Viewport
                         mecAltColor = new SharpDX.Vector4(vectorParam.Value.x, vectorParam.Value.y, vectorParam.Value.z, 0.0f);
                     else if (paramName.Equals("AbsorbtionColor", StringComparison.OrdinalIgnoreCase))
                         mecAbsorbtionColor = new SharpDX.Vector4(vectorParam.Value.x, vectorParam.Value.y, vectorParam.Value.z, 0.0f);
+                    // These used to go to TintColorB.x/y, which Frosty's MEC shader applied to the MAIN
+                    // normal map (e.g. Anansi facade: main normal stretched 20x, 5% strength).
                     else if (paramName.Equals("NormalDetailStrength", StringComparison.OrdinalIgnoreCase))
-                        TintColorB.X = vectorParam.Value.x;
+                        mecDetailStrength = vectorParam.Value.x;
                     else if (paramName.Equals("NormalDetailTiling", StringComparison.OrdinalIgnoreCase))
-                        TintColorB.Y = vectorParam.Value.x;
+                        mecDetailTiling = vectorParam.Value.x;
+                    else if (paramName.Equals("Tiling", StringComparison.OrdinalIgnoreCase))
+                    {
+                        float tx = vectorParam.Value.x;
+                        float ty = vectorParam.Value.y;
+                        if (tx > 0.0f)
+                            mecTiling = new Vector2(tx, ty > 0.0f ? ty : tx);
+                    }
                 }
 
                 else if (ProfilesLibrary.DataVersion == (int)ProfileVersion.StarWarsBattlefrontII || ProfilesLibrary.DataVersion == (int)ProfileVersion.StarWarsSquadrons)
@@ -808,6 +871,10 @@ namespace Frosty.Core.Viewport
                     {
                         TintTexture = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid);
                         CustomParam2 = 1;
+                    }
+                    else if (paramName.Equals("NormalDetail") && mecDetailNormal == null)
+                    {
+                        mecDetailNormal = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid);
                     }
                 }
 
@@ -1167,6 +1234,10 @@ namespace Frosty.Core.Viewport
                     TintColorB.Z = 1.0f;
                 }
             }
+
+            if (ProfilesLibrary.IsLoaded(ProfileVersion.MirrorsEdgeCatalyst))
+                CustomParam3 = MecFinishMaterial(shaderAsset.Name, mecDiffuseScore > 0, NormTexture, mecRsmScore > 0,
+                    mecTiling, mecDetailTiling, mecDetailStrength, mecDetailNormal, AdditionalParams, AdditionalTextures);
 
             if (DiffuseTexture == null)
             {

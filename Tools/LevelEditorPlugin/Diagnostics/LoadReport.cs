@@ -175,6 +175,8 @@ public sealed class LoadReport
     }
 
     /// <summary>Called on the render thread when the scene's render task starts.</summary>
+    private List<KeyValuePair<string, int>> fallbackShaderStats;
+
     public void RenderStarting()
     {
         lock (sync)
@@ -184,6 +186,7 @@ public sealed class LoadReport
             renderTimer.Start();
             renderStartedAt = Stopwatch.GetTimestamp();
         }
+        Frosty.Core.Viewport.MecFallbackStats.Reset();
         LevelEditorLog.Info("Load", "Render phase started (creating render proxies, meshes and textures)");
     }
 
@@ -198,6 +201,7 @@ public sealed class LoadReport
             renderDone = true;
             renderTimer.Stop();
             memoryAfterRender = Memory.Capture();
+            fallbackShaderStats = Frosty.Core.Viewport.MecFallbackStats.Snapshot();
             if (error != null)
                 Failed = true;
             try
@@ -611,6 +615,14 @@ public sealed class LoadReport
             sb.AppendLine($"  render proxies: {totalProxies}");
             AppendCounts(sb, proxyTypes, 20);
             sb.AppendLine();
+
+            if (fallbackShaderStats != null && fallbackShaderStats.Count > 0)
+            {
+                sb.AppendLine("Fallback shader setup (mesh sections; a mesh used by several objects counts once)");
+                foreach (KeyValuePair<string, int> kv in fallbackShaderStats)
+                    sb.AppendLine($"  {kv.Value,9}  {kv.Key}");
+                sb.AppendLine();
+            }
 
             sb.AppendLine("Materials (texture parameter names; the MEC fallback shader only takes a colour texture named Diffuse*)");
             sb.AppendLine($"  materials: {materialsSeen}, without a Diffuse* texture: {materialsWithoutDiffuse}, without any texture: {materialsWithoutTextures}");

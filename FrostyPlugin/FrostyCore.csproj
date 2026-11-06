@@ -280,6 +280,7 @@
     <Compile Include="Viewport\IViewport.cs" />
     <Compile Include="Viewport\MeshVariationDb.cs" />
     <Compile Include="Viewport\RenderMesh.cs" />
+    <Compile Include="Viewport\MecFallbackStats.cs" />
     <Compile Include="Viewport\Screen.cs" />
     <Compile Include="Viewport\SharpDXUtils.cs" />
     <Compile Include="Viewport\TextureUtils.cs" />

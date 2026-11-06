@@ -33,6 +33,10 @@ using System.Windows;
 
 [assembly: RegisterMenuExtension(typeof(BF1CoreMenuExtension))]
 
+// Mirror's Edge Catalyst mesh fallback pixel shader (replaces FrostyPlugin's built-in one; see
+// Shaders/MecMeshFallback.hlsl and the CompileMecShader target in the .csproj).
+[assembly: RegisterShader(ShaderType.PixelShader, "20160607", "LevelEditorPlugin.Shaders.MecMeshFallback.pso")]
+
 [assembly: RegisterAssetDefinition("LevelData", typeof(LevelDataAssetDefinition))]
 [assembly: RegisterAssetDefinition("DetachedSubWorldData", typeof(DetachedSubWorldDataAssetDefinition))]
 [assembly: RegisterAssetDefinition("ObjectBlueprint", typeof(ObjectBlueprintAssetDefinition))]

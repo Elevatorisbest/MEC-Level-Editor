@@ -86,6 +86,30 @@
 		</Reference>
 	</ItemGroup>
 
+	<!--
+	  Mirror's Edge Catalyst fallback pixel shader, compiled with the fxc.exe that ships in the repo's
+	  Shaders folder and embedded as a resource. Registered in Properties/AssemblyInfo.cs as the
+	  "20160607" pixel shader, which replaces the MEC shader in FrostyPlugin's Shaders.bin.
+	-->
+	<PropertyGroup>
+		<MecShaderSource>$(MSBuildProjectDirectory)\Shaders\MecMeshFallback.hlsl</MecShaderSource>
+		<MecShaderOutput>$(MSBuildProjectDirectory)\obj\Shaders\MecMeshFallback.pso</MecShaderOutput>
+		<FxcPath>$(MSBuildProjectDirectory)\..\..\Shaders\fxc.exe</FxcPath>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="$(MecShaderOutput)">
+			<LogicalName>LevelEditorPlugin.Shaders.MecMeshFallback.pso</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<Target Name="CompileMecShader" BeforeTargets="BeforeBuild"
+	        Inputs="$(MecShaderSource);$(MSBuildProjectDirectory)\..\..\Shaders\Common.h"
+	        Outputs="$(MecShaderOutput)">
+		<MakeDir Directories="$(MSBuildProjectDirectory)\obj\Shaders" />
+		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T ps_5_0 /E PS_MeshFallback /O3 /Fo &quot;$(MecShaderOutput)&quot; &quot;$(MecShaderSource)&quot;" />
+	</Target>
+
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<Exec Command="xcopy /Y $(TargetPath) $(SolutionDir)FrostyEditor\$(OutDir)Plugins\" />
 	</Target>
