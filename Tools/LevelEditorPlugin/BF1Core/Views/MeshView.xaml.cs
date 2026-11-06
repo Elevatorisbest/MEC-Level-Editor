@@ -65,6 +65,9 @@ public partial class MeshView : UserControl
         ComboBox_ViewMode.ItemsSource = ViewModeItems;
         ComboBox_ViewMode.SelectedIndex = Math.Min(LevelEditorRenderingOptions.ViewModeIndex, ViewModeItems.Length - 1);
 
+        ComboBox_MoveSnap.ItemsSource = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Select(LevelEditorViewFilter.MoveSnapSteps, s => s > 0 ? $"{s:0.##} m" : "Off"));
+        ComboBox_MoveSnap.SelectedIndex = Math.Max(0, Math.Min(LevelEditorViewFilter.MoveSnapIndex, LevelEditorViewFilter.MoveSnapSteps.Length - 1));
+
         ComboBox_ArrayLayer.ItemsSource = LevelEditorViewFilter.ArrayLayerModeNames;
         ComboBox_ArrayLayer.SelectedIndex = Math.Max(0, Math.Min(LevelEditorViewFilter.ArrayLayerMode, LevelEditorViewFilter.ArrayLayerModeNames.Length - 1));
 
@@ -83,6 +86,12 @@ public partial class MeshView : UserControl
     private void OnPendingCommitChanged()
     {
         Dispatcher.InvokeAsync(UpdateWriteHavokButtonState);
+    }
+
+    private void ComboBox_MoveSnap_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (ComboBox_MoveSnap.SelectedIndex >= 0)
+            LevelEditorViewFilter.MoveSnapIndex = ComboBox_MoveSnap.SelectedIndex;
     }
 
     private void ComboBox_ArrayLayer_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

@@ -16,6 +16,23 @@ public static class LevelEditorViewFilter
     private const string KeyIcons = "LevelEditorView_HelperIcons";
     private const string KeyInstancing = "LevelEditorView_Instancing";
     private const string KeyUiMeshes = "LevelEditorView_UiMeshes";
+    private const string KeyMoveSnap = "LevelEditorView_MoveSnapIndex";
+
+    /// <summary>Move snapping choices in metres (0 = off); index saved in config.</summary>
+    public static readonly float[] MoveSnapSteps = { 0.0f, 0.05f, 0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f };
+    private static int? moveSnapIndex;
+
+    public static int MoveSnapIndex
+    {
+        get => moveSnapIndex ??= Config.Get(KeyMoveSnap, 0, ConfigScope.Game);
+        set
+        {
+            moveSnapIndex = value;
+            Config.Add(KeyMoveSnap, value, ConfigScope.Game);
+            Config.Save();
+            Screens.TranslateGizmo.SnapStep = MoveSnapSteps[System.Math.Max(0, System.Math.Min(value, MoveSnapSteps.Length - 1))];
+        }
+    }
     private static bool? uiMeshes;
 
     /// <summary>Meshes with only UI/ shaders (in-game map, EchoPlaneBackground). Hidden by default.</summary>

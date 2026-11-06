@@ -211,6 +211,18 @@ public class TranslateGizmo : Gizmo
 {
     public bool IsMoving => moved;
 
+    /// <summary>
+    /// Grid step in metres for moving with the gizmo (0 = off). The moved axis snaps to whole
+    /// multiples of this in world space. Set from the View options (LevelEditorViewFilter.MoveSnap).
+    /// </summary>
+    public static float SnapStep { get; set; }
+
+    private static float Snap(float value)
+    {
+        float step = SnapStep;
+        return step > 0.0f ? (float)Math.Round(value / step) * step : value;
+    }
+
     private BoundingBox[] axisBoundingBoxes = new BoundingBox[3]
     {
         new BoundingBox(Vector3.Zero, new Vector3(0.25f, 0.25f, 1.0f)),
@@ -319,7 +331,7 @@ public class TranslateGizmo : Gizmo
                 Plane axisPlane = new Plane(m.TranslationVector, Vector3.UnitX);
                 rayCast.Intersects(ref axisPlane, out outPosition);
 
-                m.TranslationVector = new Vector3(Transform.TranslationVector.X, Transform.TranslationVector.Y, outPosition.Z + offset);
+                m.TranslationVector = new Vector3(Transform.TranslationVector.X, Transform.TranslationVector.Y, Snap(outPosition.Z + offset));
                 Transform = m;
             }
             else if (selectedAxis == 1)
@@ -330,7 +342,7 @@ public class TranslateGizmo : Gizmo
                 Plane axisPlane = new Plane(m.TranslationVector, Vector3.UnitZ);
                 rayCast.Intersects(ref axisPlane, out outPosition);
 
-                m.TranslationVector = new Vector3(Transform.TranslationVector.X, outPosition.Y + offset, Transform.TranslationVector.Z);
+                m.TranslationVector = new Vector3(Transform.TranslationVector.X, Snap(outPosition.Y + offset), Transform.TranslationVector.Z);
                 Transform = m;
             }
             else if (selectedAxis == 2)
@@ -341,7 +353,7 @@ public class TranslateGizmo : Gizmo
                 Plane axisPlane = new Plane(m.TranslationVector, Vector3.UnitY);
                 rayCast.Intersects(ref axisPlane, out outPosition);
 
-                m.TranslationVector = new Vector3(outPosition.X + offset, Transform.TranslationVector.Y, Transform.TranslationVector.Z);
+                m.TranslationVector = new Vector3(Snap(outPosition.X + offset), Transform.TranslationVector.Y, Transform.TranslationVector.Z);
                 Transform = m;
             }
 
@@ -423,6 +435,12 @@ public class LevelEditorScreen : DeferredRenderScreen2
     {
         GroundVisible = groundVisibleByDefault;
         translateGizmo = new TranslateGizmo();
+        Editors.PendingEditsCommitter.EnsureHooked();
+        {
+            int snap = Options.LevelEditorViewFilter.MoveSnapIndex;
+            float[] steps = Options.LevelEditorViewFilter.MoveSnapSteps;
+            TranslateGizmo.SnapStep = steps[Math.Max(0, Math.Min(snap, steps.Length - 1))];
+        }
 
         renderTasks.Enqueue(state =>
         {
@@ -1097,6 +1115,32 @@ public class LevelEditorScreen : DeferredRenderScreen2
     }
     private MouseButtonData mouseButtonData;
 
+    /// <summary>
+    /// Moves the entity so that its world position is the gizmo position, keeping its world rotation
+    /// and scale. The gizmo works in world space but SetTransform takes the transform relative to the
+    /// parent (prefab, sub-world, static model group), so convert through the parent's world matrix.
+    /// Before this, objects inside an offset or rotated parent jumped when moved.
+    /// </summary>
+    private void MoveEntityToGizmo(ISpatialEntity spatialEntity, bool suppressUpdate)
+    {
+        Matrix local = spatialEntity.GetLocalTransform();
+        Matrix world = spatialEntity.GetTransform();
+
+        // world = local * parentWorld  =>  parentWorld = inverse(local) * world
+        Matrix parentWorld = Matrix.Identity;
+        if (Math.Abs(local.Determinant()) > 1e-8f)
+            parentWorld = Matrix.Invert(local) * world;
+
+        world.Decompose(out Vector3 scale, out Quaternion rotation, out Vector3 _);
+        Matrix newWorld = Matrix.Scaling(scale) * Matrix.RotationQuaternion(rotation) * Matrix.Translation(translateGizmo.Transform.TranslationVector);
+
+        Matrix newLocal = newWorld;
+        if (Math.Abs(parentWorld.Determinant()) > 1e-8f)
+            newLocal = newWorld * Matrix.Invert(parentWorld);
+
+        spatialEntity.SetTransform(newLocal, suppressUpdate);
+    }
+
     public override void MouseDown(int x, int y, MouseButton button)
     {
         // Non-terrain edit mode: keep original Gizmo logic
@@ -1137,17 +1181,9 @@ public class LevelEditorScreen : DeferredRenderScreen2
             translateGizmo.MouseUp(x, y, GetHitTestRay(x, y), button))
         {
             // Support StaticModelGroup child modification
-            if (selectedProxies[0].OwnerEntity.Owner is ISpatialEntity spatialEntity)
+            if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner is ISpatialEntity spatialEntity)
             {
-                Vector3 scale;
-                Vector3 translation;
-                Quaternion rotation;
-
-                Matrix entityTransform = spatialEntity.GetLocalTransform();
-                entityTransform.Decompose(out scale, out rotation, out translation);
-
-                Matrix m = Matrix.Scaling(scale) * Matrix.RotationQuaternion(rotation) * Matrix.Translation(translateGizmo.Transform.TranslationVector);
-                spatialEntity.SetTransform(m, suppressUpdate: false);
+                MoveEntityToGizmo(spatialEntity, suppressUpdate: false);
 
                 foreach (RenderProxy proxy in selectedProxies)
                     proxy.OwnerEntity.RequiresTransformUpdate = true;
@@ -1286,15 +1322,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
         {
             if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner is ISpatialEntity spatialEntity)
             {
-                Vector3 scale;
-                Vector3 translation;
-                Quaternion rotation;
-
-                Matrix entityTransform = spatialEntity.GetLocalTransform();
-                entityTransform.Decompose(out scale, out rotation, out translation);
-
-                Matrix m = Matrix.Scaling(scale) * Matrix.RotationQuaternion(rotation) * Matrix.Translation(translateGizmo.Transform.TranslationVector);
-                spatialEntity.SetTransform(m, suppressUpdate: true);
+                MoveEntityToGizmo(spatialEntity, suppressUpdate: true);
 
                 foreach (RenderProxy proxy in selectedProxies)
                     proxy.OwnerEntity.RequiresTransformUpdate = true;

@@ -39,6 +39,18 @@
                             Width="70"
                             VerticalAlignment="Center"
                             FontWeight="Bold"
+                            Text="Move snap:"
+                            ToolTip="Grid step for moving with the gizmo. The dragged axis snaps to whole multiples of this, in world space." />
+                        <ComboBox
+                            x:Name="ComboBox_MoveSnap"
+                            MinWidth="120"
+                            SelectionChanged="ComboBox_MoveSnap_SelectionChanged" />
+                    </DockPanel>
+                    <DockPanel Margin="3">
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            FontWeight="Bold"
                             Text="Array layer:"
                             ToolTip="Temporary: which vertex data picks the layer of TA_ texture array materials (building modules). Try each on a building that looks wrong." />
                         <ComboBox

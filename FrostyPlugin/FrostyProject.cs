@@ -110,8 +110,29 @@ namespace Frosty.Core
             return LegacyLoad(inFilename);
         }
 
+        /// <summary>
+        /// Raised at the start of Save and WriteToMod (save, autosave, export, launch), so editors
+        /// can flush pending in-memory edits into the asset manager first. May be raised on a
+        /// background thread.
+        /// </summary>
+        public static event Action BeforeWrite;
+
+        private static void RaiseBeforeWrite()
+        {
+            try
+            {
+                BeforeWrite?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                App.Logger.LogError($"Error while preparing edits for saving: {ex.Message}");
+            }
+        }
+
         public void Save(string overrideFilename = "", bool updateDirtyState = true)
         {
+            RaiseBeforeWrite();
+
             string actualFilename = filename;
             if (!string.IsNullOrEmpty(overrideFilename))
                 actualFilename = overrideFilename;
@@ -469,6 +490,7 @@ namespace Frosty.Core
 
         public void WriteToMod(string filename, ModSettings overrideSettings)
         {
+            RaiseBeforeWrite();
             using (FrostyModWriter writer = new FrostyModWriter(new FileStream(filename, FileMode.Create), overrideSettings))
                 writer.WriteProject(this);
         }
