@@ -2079,7 +2079,11 @@ namespace Frosty.ModSupport
             {
                 //KillEADesktop();
                 //ModifyInstallerData($"-dataPath \"{modDataPath.Trim('\\')}\" {additionalArgs}");
-                ExecuteProcess($"{m_fs.BasePath + ProfilesLibrary.ProfileName}.exe", $"-dataPath \"{modDataPath.Trim('\\')}\" {additionalArgs}");
+                string gameExe = $"{m_fs.BasePath + ProfilesLibrary.ProfileName}.exe";
+                string gameArgs = $"-dataPath \"{modDataPath.Trim('\\')}\" {additionalArgs}";
+                Func<string, string, bool> launchOverride = LaunchGameOverride;
+                if (launchOverride == null || !launchOverride(gameExe, gameArgs))
+                    ExecuteProcess(gameExe, gameArgs);
                 //WaitForGame();
                 //CleanUpInstalledData();
             }
@@ -2093,6 +2097,13 @@ namespace Frosty.ModSupport
             GC.Collect();
             return 0;
         }
+
+        /// <summary>
+        /// Optional replacement for starting the game executable directly (set by a launch plugin,
+        /// e.g. to start the game through Steam). Called with the executable path and the arguments
+        /// Frosty would pass; return true when the game was started.
+        /// </summary>
+        public static Func<string, string, bool> LaunchGameOverride { get; set; }
 
         private void KillEADesktop()
         {

@@ -86,6 +86,11 @@ namespace LaunchPlatformPlugin.Actions
             if (Config.Get("PlatformLaunchingEnabled", false, ConfigScope.Game))
             {
                 LaunchPlatform platform = (LaunchPlatform)Enum.Parse(typeof(LaunchPlatform), Config.Get("Platform", "Origin", ConfigScope.Game));
+                if (platform == LaunchPlatform.SteamWithEAApp)
+                {
+                    SteamWithEAApp.PreLaunch(logger, App.FileSystemManager.BasePath + $"ModData\\{App.SelectedPack}");
+                    return;
+                }
                 selectedPlatform = platforms[platform];
 
                 // get platform path
@@ -124,6 +129,11 @@ namespace LaunchPlatformPlugin.Actions
             if (Config.Get("PlatformLaunchingEnabled", false, ConfigScope.Game))
             {
                 LaunchPlatform platform = (LaunchPlatform)Enum.Parse(typeof(LaunchPlatform), Config.Get("Platform", "Origin", ConfigScope.Game));
+                if (platform == LaunchPlatform.SteamWithEAApp)
+                {
+                    SteamWithEAApp.PostLaunch(logger, cancelToken);
+                    return;
+                }
 
                 // origin doesn't need these modifications to launch with mods
                 if (platform != LaunchPlatform.Origin)

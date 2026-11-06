@@ -15,7 +15,12 @@ namespace LaunchPlatformPlugin.Options
         Origin,
         EADesktop,
         Steam,
-        EpicGamesLauncher
+        EpicGamesLauncher,
+        /// <summary>
+        /// Steam copy that also needs the EA app (e.g. Mirror's Edge Catalyst on Steam): Steam is
+        /// restarted with GAME_DATA_DIR and the game is started through Steam, which starts the EA app.
+        /// </summary>
+        SteamWithEAApp
     }
 
     public class FrostyPlatformDataEditor : FrostyCustomComboDataEditor<string, string>
