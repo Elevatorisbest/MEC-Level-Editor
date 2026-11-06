@@ -334,7 +334,7 @@ duplicated mesh path.
 
 The existing `.gitignore` is the standard Visual Studio one. It already covers `bin/`, `obj/`,
 `.vs/`, `*.user`, `*.log`, `*.pdb`. It did **not** cover Frosty/game output. These additions were
-applied in commit `92b6372`, and no tracked file matched them (I checked with `git ls-files -ci`):
+applied in commit `910b4fa`, and no tracked file matched them (I checked with `git ls-files -ci`):
 ```
 # Frosty / game data — never commit
 *.fbproject

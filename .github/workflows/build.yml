@@ -1,0 +1,137 @@
+# Builds Frosty Editor + the Level Editor plugin (and the other plugins) on a
+# GitHub-hosted Windows runner, so no local Visual Studio install is needed.
+#
+# Output: an artifact "FrostyEditor-<sha>" containing the runnable editor
+# (Developer - Debug, x64) with the plugins in its Plugins folder, plus
+# "build-logs-<sha>" with the MSBuild logs. No game data is used or produced.
+#
+# See docs/BUILD.md for how to download and run the result.
+
+name: Build
+
+on:
+  push:
+    branches: [dev]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CONFIGURATION: Developer - Debug
+  PLATFORM: x64
+  OUTDIR: FrostyEditor\bin\Developer\Debug
+
+jobs:
+  build:
+    # windows-2022 keeps Visual Studio 2022 (windows-latest moved to VS 2026).
+    runs-on: windows-2022
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Report toolchain and pick C++ toolset
+        id: toolchain
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          Write-Host "Visual Studio: $vs"
+          Write-Host "Version: $(& $vswhere -latest -property catalog_productDisplayVersion)"
+          $toolsetRoot = Join-Path $vs 'MSBuild\Microsoft\VC\v170\Platforms\x64\PlatformToolsets'
+          $toolsets = (Get-ChildItem $toolsetRoot -Directory).Name
+          Write-Host "Installed x64 platform toolsets: $($toolsets -join ', ')"
+          Write-Host "Relevant VS packages (C++/CLI, v141):"
+          (& $vswhere -latest -format json -include packages | ConvertFrom-Json).packages |
+            Where-Object { $_.id -match 'CLI|v141' } | ForEach-Object { Write-Host "  $($_.id)" }
+          # FrostyHash.vcxproj asks for v141 (VS 2017). Use it if present,
+          # otherwise build with VS 2022's v143.
+          $toolset = if ($toolsets -contains 'v141') { 'v141' } else { 'v143' }
+          Write-Host "Using PlatformToolset=$toolset"
+          "toolset=$toolset" >> $env:GITHUB_OUTPUT
+          New-Item -ItemType Directory -Force -Path logs | Out-Null
+
+      - name: Build FrostyEditor (with FrostyHash, FrostySdk, FrostyCore, FrostyControls, FrostyModSupport)
+        shell: pwsh
+        run: |
+          # Post-build steps use $(SolutionDir); MSBuild picks it up from the environment.
+          $env:SolutionDir = "$($PWD.Path)\"
+          msbuild FrostyEditor\FrostyEditor.csproj -restore -m -nologo -v:minimal `
+            "-p:Configuration=$env:CONFIGURATION" "-p:Platform=$env:PLATFORM" `
+            "-p:PlatformToolset=${{ steps.toolchain.outputs.toolset }}" `
+            "-flp:logfile=logs\FrostyEditor.log;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { throw "FrostyEditor build failed (exit $LASTEXITCODE)" }
+
+      - name: Build plugins (LevelEditorPlugin required, others best-effort)
+        shell: pwsh
+        run: |
+          $env:SolutionDir = "$($PWD.Path)\"
+          $required = @('Tools\LevelEditorPlugin\LevelEditorPlugin.csproj')
+          $optional = Get-ChildItem Plugins -Recurse -Filter *.csproj |
+            ForEach-Object { Resolve-Path -Relative $_.FullName } |
+            ForEach-Object { $_.TrimStart('.', '\') }
+          $results = @()
+          foreach ($proj in ($required + $optional)) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($proj)
+            Write-Host "::group::$name"
+            msbuild $proj -restore -m -nologo -v:minimal `
+              "-p:Configuration=$env:CONFIGURATION" "-p:Platform=$env:PLATFORM" `
+              "-p:PlatformToolset=${{ steps.toolchain.outputs.toolset }}" `
+              "-flp:logfile=logs\$name.log;verbosity=normal"
+            $ok = ($LASTEXITCODE -eq 0)
+            Write-Host "::endgroup::"
+            if (-not $ok) { Write-Host "::warning::$name failed to build" }
+            $results += [pscustomobject]@{ Project = $name; Required = ($required -contains $proj); Ok = $ok }
+          }
+          "## Plugin build results" >> $env:GITHUB_STEP_SUMMARY
+          "| Project | Required | Result |" >> $env:GITHUB_STEP_SUMMARY
+          "|---|---|---|" >> $env:GITHUB_STEP_SUMMARY
+          foreach ($r in $results) {
+            "| $($r.Project) | $($r.Required) | $(if ($r.Ok) { 'OK' } else { 'FAILED' }) |" >> $env:GITHUB_STEP_SUMMARY
+          }
+          $failedRequired = $results | Where-Object { $_.Required -and -not $_.Ok }
+          if ($failedRequired) { throw "Required plugin(s) failed: $($failedRequired.Project -join ', ')" }
+
+      - name: Package editor
+        shell: pwsh
+        run: |
+          $src = $env:OUTDIR
+          $dst = 'package\FrostyEditor'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item "$src\*" $dst -Recurse
+          # Keep the artifact small: only the Mirror's Edge Catalyst type SDK is
+          # needed. Other games' SDK DLLs are dropped from the package (not from the repo).
+          Get-ChildItem "$dst\Profiles" -Filter *SDK.dll -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ne 'MirrorsEdgeSDK.dll' } | Remove-Item
+          "${{ github.sha }}" | Set-Content "$dst\BUILD_COMMIT.txt"
+          Write-Host "Plugins in package:"
+          Get-ChildItem "$dst\Plugins" -Filter *.dll -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name)" }
+          $size = (Get-ChildItem $dst -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+          Write-Host ("Package size: {0:N1} MB" -f $size)
+          if (-not (Test-Path "$dst\Plugins\LevelEditorPlugin.dll")) { throw "LevelEditorPlugin.dll missing from package" }
+
+      - name: Upload editor
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrostyEditor-${{ github.sha }}
+          path: package/
+          retention-days: 5
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.sha }}
+          path: logs/
+          retention-days: 7
