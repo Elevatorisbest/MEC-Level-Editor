@@ -703,6 +703,16 @@ public class LevelEditorScreen : DeferredRenderScreen2
             selectedProxies.AddRange(foundProxies);
             foreach (RenderProxy proxy in selectedProxies)
                 proxy.SetSelected(state, true);
+
+            // diagnostics: log the selected meshes' materials (once per mesh per session)
+            try
+            {
+                MaterialInspector.LogSelection(entity.DisplayName, selectedProxies.OfType<ModelRenderProxy>().Select(p => p.MeshData).Distinct().ToList());
+            }
+            catch (Exception ex)
+            {
+                LevelEditorLog.Warning("Selection", "Could not log selected materials", ex);
+            }
         });
 
         // 2026/01/18

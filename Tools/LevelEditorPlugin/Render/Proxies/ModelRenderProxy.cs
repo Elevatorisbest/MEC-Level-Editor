@@ -11,6 +11,9 @@ namespace LevelEditorPlugin.Render.Proxies;
 public class ModelRenderProxy : RenderProxy
 {
     protected MeshRenderable renderData;
+
+    /// <summary>The (shared) mesh this proxy draws; used for diagnostics.</summary>
+    public MeshRenderable MeshData => renderData;
     protected int lodIndex;
 
     // Shared by all proxies (owned by the screen's shader library); never disposed here.

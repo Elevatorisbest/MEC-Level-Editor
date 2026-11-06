@@ -375,6 +375,10 @@ public class MeshRenderable : BaseRenderable
     public float[] LodDistances { get; private set; } = new float[6];
     public float CullScreenArea { get; private set; } = 0.0f;
 
+    /// <summary>Diagnostics: mesh asset name and materials, logged when the mesh is selected.</summary>
+    public string DebugMeshName { get; set; }
+    public MeshMaterialCollection DebugMaterials { get; set; }
+
     /// <summary>Diagnostics: time spent building the untextured (position/normal) LODs at load.</summary>
     public double UntexturedBuildMilliseconds { get; private set; }
     /// <summary>Diagnostics: time spent building the textured MeshSetPlugin mesh, including texture loads.</summary>

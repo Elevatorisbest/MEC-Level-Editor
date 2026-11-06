@@ -48,6 +48,8 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
             }
 
             MeshData = new Render.MeshRenderable(state, meshSet, lodGroup.Data, materials, resEntry);
+            MeshData.DebugMeshName = App.AssetManager.GetEbxEntry(FileGuid)?.Name;
+            MeshData.DebugMaterials = materials;
             LoadReport.MeshLoaded(
                 (System.Diagnostics.Stopwatch.GetTimestamp() - diagStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
                 MeshData.UseTexturedRendering,

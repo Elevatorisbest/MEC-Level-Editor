@@ -579,6 +579,10 @@ namespace Frosty.Core.Viewport
                 AdditionalParams.Add(Vector4.Zero);
             }
 
+            // MEC: other colour hints, used only when a material has neither a colour texture nor DiffuseColor
+            Vector4? mecAltColor = null;
+            Vector4? mecAbsorbtionColor = null;
+
             // vector params
             foreach (dynamic vectorParam in material.VectorParameters)
             {
@@ -647,13 +651,18 @@ namespace Frosty.Core.Viewport
                 else if (ProfilesLibrary.DataVersion == (int)ProfileVersion.MirrorsEdgeCatalyst)
                 {
                     // MEC
-                    if (paramName.Equals("DiffuseColor", StringComparison.OrdinalIgnoreCase))
+                    // "DiffuceColor" (sic) is used by some MEC materials for the same thing
+                    if (paramName.Equals("DiffuseColor", StringComparison.OrdinalIgnoreCase) || paramName.Equals("DiffuceColor", StringComparison.OrdinalIgnoreCase))
                     {
                         TintColorA = new SharpDX.Vector4(
                             vectorParam.Value.x, vectorParam.Value.y, vectorParam.Value.z, 0.0f
                             );
                         TintColorB.Z = 1.0f;
                     }
+                    else if (paramName.Equals("BaseColor", StringComparison.OrdinalIgnoreCase) || paramName.Equals("Color", StringComparison.OrdinalIgnoreCase))
+                        mecAltColor = new SharpDX.Vector4(vectorParam.Value.x, vectorParam.Value.y, vectorParam.Value.z, 0.0f);
+                    else if (paramName.Equals("AbsorbtionColor", StringComparison.OrdinalIgnoreCase))
+                        mecAbsorbtionColor = new SharpDX.Vector4(vectorParam.Value.x, vectorParam.Value.y, vectorParam.Value.z, 0.0f);
                     else if (paramName.Equals("NormalDetailStrength", StringComparison.OrdinalIgnoreCase))
                         TintColorB.X = vectorParam.Value.x;
                     else if (paramName.Equals("NormalDetailTiling", StringComparison.OrdinalIgnoreCase))
@@ -1138,6 +1147,24 @@ namespace Frosty.Core.Viewport
                     if (paramName.Contains("Diffuse")) { DiffuseTexture = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid); }
                     else if (paramName.Contains("Normal")) { NormTexture = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid); }
                     else if (paramName.Contains("Specular")) { MaskTexture = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid); }
+                }
+            }
+
+            // MEC: a material without colour texture and without DiffuseColor would render plain white.
+            // Use other colour hints, and draw glass (MEC's glass shaders are not reproduced by the
+            // fallback shader) as a dark tint of its absorption colour instead. Approximation only.
+            if (ProfilesLibrary.IsLoaded(ProfileVersion.MirrorsEdgeCatalyst) && mecDiffuseScore == 0 && TintColorB.Z < 0.5f)
+            {
+                Vector4? hint = mecAltColor;
+                if (hint == null && shaderAsset.Name.IndexOf("Glass", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Vector4 absorb = mecAbsorbtionColor ?? new Vector4(0.5f, 0.55f, 0.6f, 0.0f);
+                    hint = new Vector4(absorb.X * 0.2f, absorb.Y * 0.2f, absorb.Z * 0.2f, 0.0f);
+                }
+                if (hint != null)
+                {
+                    TintColorA = new Vector4(hint.Value.X, hint.Value.Y, hint.Value.Z, 0.0f);
+                    TintColorB.Z = 1.0f;
                 }
             }
 
