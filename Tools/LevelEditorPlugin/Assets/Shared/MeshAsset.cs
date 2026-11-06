@@ -51,6 +51,9 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
             MeshData.DebugMeshName = App.AssetManager.GetEbxEntry(FileGuid)?.Name;
             MeshData.DebugMaterials = materials;
             MeshData.IsLightCard = IsLightCard(materials, MeshData.DebugMeshName, out bool emissiveOnly);
+            MeshData.IsUiMesh = IsUiMesh(materials);
+            if (MeshData.IsUiMesh)
+                LoadReport.Current?.UiMesh(MeshData.DebugMeshName ?? FileGuid.ToString());
             if (emissiveOnly)
                 LoadReport.Current?.EmissiveOnlyMesh(MeshData.DebugMeshName ?? FileGuid.ToString(), MeshData.IsLightCard);
             LoadReport.MeshLoaded(
@@ -102,6 +105,31 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
                 return false;
             bool emissivePlane = meshName != null && meshName.IndexOf("emissiveplane", StringComparison.OrdinalIgnoreCase) >= 0;
             return allCardShaders || emissivePlane;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>True when the mesh has materials and all of them use a shader under UI/.</summary>
+    private static bool IsUiMesh(MeshMaterialCollection collection)
+    {
+        if (collection == null)
+            return false;
+        try
+        {
+            int count = 0;
+            foreach (MeshMaterial material in collection)
+            {
+                count++;
+                string shader = material.Shader.Type == PointerRefType.External
+                    ? App.AssetManager.GetEbxEntry(material.Shader.External.FileGuid)?.Name ?? ""
+                    : "";
+                if (!shader.StartsWith("UI/", StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return count > 0;
         }
         catch (Exception)
         {

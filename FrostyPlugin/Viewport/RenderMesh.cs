@@ -101,10 +101,10 @@ namespace Frosty.Core.Viewport
         public float BoneWeights7;
         public uint TangentSpace;
         /// <summary>
-        /// Texture array layer + 1 from the mesh's SubMaterialIndex element (0 = mesh has none).
-        /// Used by the MEC fallback shader for TA_ (texture array) materials.
+        /// The mesh's SubMaterialIndex element, each component + 1 (0 = mesh has none). Used by the
+        /// MEC fallback shader to pick the layer of TA_ (texture array) materials.
         /// </summary>
-        public float ArraySlice;
+        public Vector4 SubMaterial;
     }
 
     public enum ShaderParameterType
@@ -1430,7 +1430,7 @@ namespace Frosty.Core.Viewport
                 new InputElement("BLENDWEIGHT", 0, SharpDX.DXGI.Format.R32G32B32A32_Float, 0),
                 new InputElement("BLENDWEIGHT", 1, SharpDX.DXGI.Format.R32G32B32A32_Float, 0),
                 new InputElement("TANGENTSPACE", 0, SharpDX.DXGI.Format.R32_UInt, 0),
-                new InputElement("TEXCOORD", 3, SharpDX.DXGI.Format.R32_Float, 0)
+                new InputElement("TEXCOORD", 3, SharpDX.DXGI.Format.R32G32B32A32_Float, 0)
             });
             perm.IsFallback = true;
             perm.IsSkinned = true;

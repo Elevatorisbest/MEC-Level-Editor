@@ -15,6 +15,15 @@ public static class LevelEditorViewFilter
     private const string KeyLightCards = "LevelEditorView_EmissiveOnlyMeshes";
     private const string KeyIcons = "LevelEditorView_HelperIcons";
     private const string KeyInstancing = "LevelEditorView_Instancing";
+    private const string KeyUiMeshes = "LevelEditorView_UiMeshes";
+    private static bool? uiMeshes;
+
+    /// <summary>Meshes with only UI/ shaders (in-game map, EchoPlaneBackground). Hidden by default.</summary>
+    public static bool UiMeshes
+    {
+        get => uiMeshes ??= Config.Get(KeyUiMeshes, false, ConfigScope.Game);
+        set => Set(KeyUiMeshes, ref uiMeshes, value);
+    }
     private const string KeyArrayLayerMode = "LevelEditorView_ArrayLayerMode";
 
     /// <summary>
@@ -23,16 +32,20 @@ public static class LevelEditorViewFilter
     /// </summary>
     public static readonly string[] ArrayLayerModeNames =
     {
-        "Auto (SubMaterialIndex, else 0)",
-        "SubMaterialIndex",
-        "UV1 X",
-        "UV1 Y",
-        "UV2 X",
-        "UV2 Y",
-        "Vertex colour R",
-        "Vertex colour A",
+        "Auto (SubMaterialIndex 1st, else 0)",
+        "SubMaterialIndex 1st",
+        "SubMaterialIndex 2nd",
+        "SubMaterialIndex 3rd",
+        "SubMaterialIndex 4th",
         "UV0 X whole number",
         "UV0 Y whole number",
+        "UV0 X whole, wrapped",
+        "UV0 Y whole, wrapped",
+        "UV0 X whole, negative wrapped",
+        "UV0 Y whole, negative wrapped",
+        "SubMaterialIndex 1st + UV0 X whole",
+        "UV1 X",
+        "Vertex colour R",
     };
 
     private static int? arrayLayerMode;
@@ -100,7 +113,8 @@ public static class LevelEditorViewFilter
     public static bool HidesMesh(RenderProxy proxy)
     {
         if (proxy is ModelRenderProxy model)
-            return !LightCards && model.MeshData != null && model.MeshData.IsLightCard;
+            return model.MeshData != null
+                && ((!LightCards && model.MeshData.IsLightCard) || (!UiMeshes && model.MeshData.IsUiMesh));
         if (proxy is SpriteRenderProxy sprite)
             return sprite.IsCollisionVolume && !CollisionVolumes;
         return false;

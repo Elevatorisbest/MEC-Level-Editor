@@ -391,6 +391,42 @@ namespace MeshSetPlugin.Render
         /// <summary>
         /// Re-organizes the vertices into the fallback shader layout and writes them to the vertex buffer
         /// </summary>
+        /// <summary>
+        /// Short description of the SubMaterialIndex values and UV0 whole-number ranges of a
+        /// section (diagnostics for texture-array layer selection; shown in the level editor's
+        /// selection log).
+        /// </summary>
+        private static string SummarizeVertices(FallbackVertex[] vertices)
+        {
+            // only meshes with SubMaterialIndex (texture-array buildings); keeps load time unchanged otherwise
+            if (vertices.Length == 0 || vertices[0].SubMaterial.X < 0.5f)
+                return null;
+
+            Dictionary<string, int> subMaterials = new Dictionary<string, int>();
+            Dictionary<string, int> uvCells = new Dictionary<string, int>();
+            float minU = float.MaxValue, maxU = float.MinValue, minV = float.MaxValue, maxV = float.MinValue;
+            foreach (FallbackVertex v in vertices)
+            {
+                if (v.SubMaterial.X > 0.5f)
+                {
+                    string key = $"({v.SubMaterial.X - 1},{v.SubMaterial.Y - 1},{v.SubMaterial.Z - 1},{v.SubMaterial.W - 1})";
+                    subMaterials.TryGetValue(key, out int n);
+                    subMaterials[key] = n + 1;
+                }
+                string cell = $"{(int)Math.Floor(v.TexCoord0.X)},{(int)Math.Floor(v.TexCoord0.Y)}";
+                uvCells.TryGetValue(cell, out int m);
+                uvCells[cell] = m + 1;
+                minU = Math.Min(minU, v.TexCoord0.X); maxU = Math.Max(maxU, v.TexCoord0.X);
+                minV = Math.Min(minV, v.TexCoord0.Y); maxV = Math.Max(maxV, v.TexCoord0.Y);
+            }
+
+            string Top(Dictionary<string, int> d) => d.Count == 0 ? "none" : string.Join(" ",
+                System.Linq.Enumerable.Take(System.Linq.Enumerable.Select(System.Linq.Enumerable.OrderByDescending(d, kv => kv.Value), kv => $"{kv.Key}x{kv.Value}"), 12))
+                + (d.Count > 12 ? $" (+{d.Count - 12} more)" : "");
+
+            return $"SubMaterialIndex values: {Top(subMaterials)}; UV0 range u {minU:0.##}..{maxU:0.##}, v {minV:0.##}..{maxV:0.##}; UV0 whole-number cells (u,v): {Top(uvCells)}";
+        }
+
         private void AssignFallbackVertices(RenderCreateState state, MeshRenderSection section, MeshSetSection meshSection, NativeReader reader, long indexBufferOffset)
         {
             FallbackVertex[] vertices = new FallbackVertex[meshSection.VertexCount];
@@ -653,31 +689,40 @@ namespace MeshSetPlugin.Render
                             }
                             else if (element.Usage == VertexElementUsage.SubMaterialIndex)
                             {
-                                // first component only; stored +1 so that 0 means "no index"
+                                // all (up to 4) components, each stored +1 so that 0 means "no index"
                                 long start = reader.Position;
-                                float index = -1.0f;
+                                float[] c = { -1, -1, -1, -1 };
                                 switch (element.Format)
                                 {
+                                    case VertexElementFormat.Byte4:
+                                    case VertexElementFormat.Byte4N:
+                                    case VertexElementFormat.UByte4:
+                                    case VertexElementFormat.UByte4N:
+                                        for (int k = 0; k < 4; k++) c[k] = reader.ReadByte();
+                                        break;
+                                    case VertexElementFormat.Short4:
+                                    case VertexElementFormat.UShort4:
+                                        for (int k = 0; k < 4; k++) c[k] = reader.ReadUShort();
+                                        break;
+                                    case VertexElementFormat.Short2:
+                                    case VertexElementFormat.UShort2:
+                                        for (int k = 0; k < 2; k++) c[k] = reader.ReadUShort();
+                                        break;
                                     case VertexElementFormat.Float:
                                     case VertexElementFormat.Float2:
                                     case VertexElementFormat.Float3:
-                                    case VertexElementFormat.Float4: index = reader.ReadFloat(); break;
+                                    case VertexElementFormat.Float4: c[0] = reader.ReadFloat(); break;
                                     case VertexElementFormat.Half:
                                     case VertexElementFormat.Half2:
                                     case VertexElementFormat.Half3:
-                                    case VertexElementFormat.Half4: index = HalfUtils.Unpack(reader.ReadUShort()); break;
-                                    case VertexElementFormat.Short:
-                                    case VertexElementFormat.Short2:
-                                    case VertexElementFormat.Short4:
-                                    case VertexElementFormat.UShort2:
-                                    case VertexElementFormat.UShort4: index = reader.ReadUShort(); break;
+                                    case VertexElementFormat.Half4: c[0] = HalfUtils.Unpack(reader.ReadUShort()); break;
                                     case VertexElementFormat.Int:
                                     case VertexElementFormat.UInt:
                                     case VertexElementFormat.Int2:
-                                    case VertexElementFormat.UInt2: index = reader.ReadUInt(); break;
-                                    default: index = reader.ReadByte(); break;
+                                    case VertexElementFormat.UInt2: c[0] = reader.ReadUInt(); break;
+                                    default: c[0] = reader.ReadByte(); break;
                                 }
-                                vertex.ArraySlice = index + 1.0f;
+                                vertex.SubMaterial = new Vector4(c[0] + 1.0f, c[1] + 1.0f, c[2] + 1.0f, c[3] + 1.0f);
                                 reader.Position = start + element.Size;
                             }
                             else
@@ -796,6 +841,8 @@ namespace MeshSetPlugin.Render
                     vertices[v] = vertex;
                 }
             }
+
+            section.DebugVertexSummary = SummarizeVertices(vertices);
 
             section.VertexBuffers = new D3D11.Buffer[1];
             section.VertexBufferBindings = new D3D11.VertexBufferBinding[1];

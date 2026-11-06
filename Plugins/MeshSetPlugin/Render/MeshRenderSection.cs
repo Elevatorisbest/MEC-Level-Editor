@@ -19,6 +19,8 @@ namespace MeshSetPlugin.Render
         public List<D3D11.SamplerState> VertexSamplers = new List<D3D11.SamplerState>();
         public List<D3D11.ShaderResourceView> PixelTextures = new List<D3D11.ShaderResourceView>();
         public MeshSetSection MeshSection;
+        /// <summary>Vertex data summary for diagnostics (fallback shader path only).</summary>
+        public string DebugVertexSummary;
         public int StartIndex;
         public int VertexOffset;
         public int PrimitiveCount;

@@ -101,6 +101,8 @@ public static class MaterialInspector
                         elements.Add($"{element.Usage}:{element.Format}");
                 }
                 sb.AppendLine($"Section {i++}: material {section.MeshSection.MaterialId}, {section.MeshSection.VertexCount} vertices, vertex data: {string.Join(", ", elements)}");
+                if (section.DebugVertexSummary != null)
+                    sb.AppendLine($"    {section.DebugVertexSummary}");
 
                 List<string> textures = new List<string>();
                 int slot = 1;

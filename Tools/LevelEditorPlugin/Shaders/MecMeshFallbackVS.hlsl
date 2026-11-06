@@ -28,7 +28,7 @@ struct VS_IN
     float4 BoneWeights : BLENDWEIGHT0;
     float4 BoneWeights2 : BLENDWEIGHT1;
     uint TangentSpace : TANGENTSPACE;
-    float ArraySlice : TEXCOORD3;      // texture array layer + 1 (0 = none), from SubMaterialIndex
+    float4 SubMaterial : TEXCOORD3;    // SubMaterialIndex components + 1 (0 = none)
     uint InstanceId : SV_InstanceID;
 };
 
@@ -44,7 +44,7 @@ struct VS_OUT
     float4 Color0 : COLOR0;
     float4 Color1 : COLOR1;
     float3x3 TBN : TANGENTBASIS;
-    float ArraySlice : TEXCOORD3;
+    nointerpolation float4 SubMaterial : TEXCOORD3;
 };
 
 cbuffer viewConstants : register(b0)
@@ -167,7 +167,7 @@ VS_OUT VS_Main(VS_IN In)
     Out.TexCoord2 = In.TexCoord2;
     Out.Color0 = In.Color0;
     Out.Color1 = In.Color1;
-    Out.ArraySlice = In.ArraySlice;
+    Out.SubMaterial = In.SubMaterial;
 
     return Out;
 }

@@ -29,7 +29,7 @@ struct PS_IN
     float4 Color0 : COLOR0;
     float4 Color1 : COLOR1;
     float3x3 TBN : TANGENTBASIS;
-    float ArraySlice : TEXCOORD3;      // texture array layer + 1 (0 = none)
+    nointerpolation float4 SubMaterial : TEXCOORD3;  // SubMaterialIndex components + 1 (0 = none)
 };
 
 struct PS_OUT
@@ -108,22 +108,35 @@ Texture2D<float4> texture_ColorMul : register(t9);
 SamplerState sampler0_s : register(s0);
 SamplerState sampler1_s : register(s1);
 
-// Layer for TA_ (texture array) materials. Mode 0 (default): SubMaterialIndex when the mesh has
-// one, otherwise layer 0. The other modes exist to find out which vertex data MEC uses.
-float ArrayLayer(PS_IN In)
+// Layer for TA_ (texture array) materials. Mode 0 (default): SubMaterialIndex x when the mesh has
+// one, otherwise layer 0. The other modes exist to find out which vertex data MEC uses; the list
+// must match LevelEditorViewFilter.ArrayLayerModeNames.
+float Wrap(float value, float count)
 {
+    return (count > 0.0f) ? value - count * floor(value / count) : value;
+}
+
+float ArrayLayer(PS_IN In, float layerCount)
+{
+    float4 sub = In.SubMaterial - 1.0f;
+    float u = floor(In.TexCoord0.x);
+    float v = floor(In.TexCoord0.y);
     switch (ArrayLayerMode)
     {
-        case 1: return In.ArraySlice - 1.0f;
-        case 2: return In.TexCoord1.x;
-        case 3: return In.TexCoord1.y;
-        case 4: return In.TexCoord2.x;
-        case 5: return In.TexCoord2.y;
-        case 6: return In.Color0.r * 255.0f;
-        case 7: return In.Color0.a * 255.0f;
-        case 8: return floor(In.TexCoord0.x);
-        case 9: return floor(In.TexCoord0.y);
-        default: return (In.ArraySlice > 0.5f) ? In.ArraySlice - 1.0f : 0.0f;
+        case 1: return sub.x;
+        case 2: return sub.y;
+        case 3: return sub.z;
+        case 4: return sub.w;
+        case 5: return u;
+        case 6: return v;
+        case 7: return Wrap(u, layerCount);
+        case 8: return Wrap(v, layerCount);
+        case 9: return Wrap(-u - 1.0f, layerCount);
+        case 10: return Wrap(-v - 1.0f, layerCount);
+        case 11: return Wrap(sub.x + u, layerCount);
+        case 12: return In.TexCoord1.x;
+        case 13: return In.Color0.r * 255.0f;
+        default: return (In.SubMaterial.x > 0.5f) ? sub.x : 0.0f;
     }
 }
 
@@ -149,7 +162,12 @@ PS_OUT PS_MeshFallback(PS_IN In)
     float hasDiffuseTexture = TintColorA.w;
     float hasDiffuseColor = TintColorB.z;
 
-    float layer = ArrayLayer(In);
+    uint arrayWidth, arrayHeight, layerCount = 0;
+    if (flags & MEC_FLAG_DIFFUSE_ARRAY)
+        texture_DiffuseArray.GetDimensions(arrayWidth, arrayHeight, layerCount);
+    else if (flags & MEC_FLAG_NORMAL_ARRAY)
+        texture_NormalArray.GetDimensions(arrayWidth, arrayHeight, layerCount);
+    float layer = ArrayLayer(In, (float)layerCount);
     float4 Diffuse = (flags & MEC_FLAG_DIFFUSE_ARRAY)
         ? texture_DiffuseArray.Sample(sampler1_s, float3(uv, layer))
         : texture_Diffuse.Sample(sampler1_s, uv);

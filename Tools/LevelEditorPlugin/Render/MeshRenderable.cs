@@ -386,6 +386,12 @@ public class MeshRenderable : BaseRenderable
     /// </summary>
     public bool IsLightCard { get; set; }
 
+    /// <summary>
+    /// Every material uses a UI/ shader (in-game map, EchoPlaneBackground, ...): not part of the
+    /// city. Hidden unless LevelEditorViewFilter.UiMeshes is on.
+    /// </summary>
+    public bool IsUiMesh { get; set; }
+
     /// <summary>Diagnostics: time spent building the untextured (position/normal) LODs at load.</summary>
     public double UntexturedBuildMilliseconds { get; private set; }
     /// <summary>Diagnostics: time spent building the textured MeshSetPlugin mesh, including texture loads.</summary>

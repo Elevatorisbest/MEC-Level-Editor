@@ -65,6 +65,12 @@
                         Content="Light cards"
                         ToolTip="Flat glow-only meshes, e.g. Ground_Lights_02 over the streets and light-strip decals. The load report lists them." />
                     <CheckBox
+                        x:Name="CheckBox_UiMeshes"
+                        Margin="3"
+                        Click="ViewFilter_Click"
+                        Content="UI meshes (in-game map)"
+                        ToolTip="Meshes that only use UI/ shaders, e.g. EchoPlaneBackground and the in-game map. The load report lists them." />
+                    <CheckBox
                         x:Name="CheckBox_Instancing"
                         Margin="3"
                         Click="ViewFilter_Click"

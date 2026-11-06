@@ -92,6 +92,14 @@ public sealed class LoadReport
     private readonly List<string> missingAssets = new List<string>();
     private readonly List<string> emissiveOnlyMeshes = new List<string>();
     private int lightCardMeshes;
+    private readonly List<string> uiMeshes = new List<string>();
+
+    /// <summary>A mesh whose materials all use UI/ shaders (hidden by default).</summary>
+    public void UiMesh(string meshName)
+    {
+        lock (sync)
+            uiMeshes.Add(meshName);
+    }
     private int missingAssetCount;
     private readonly List<string> nameLookups = new List<string>();
     private readonly Dictionary<string, int> meshMaterialFailures = new Dictionary<string, int>();
@@ -658,6 +666,13 @@ public sealed class LoadReport
                 sb.AppendLine("  " + m);
             if (emissiveOnlyMeshes.Count > 60)
                 sb.AppendLine($"  ... {emissiveOnlyMeshes.Count - 60} more");
+            sb.AppendLine();
+
+            sb.AppendLine($"UI meshes (all materials use UI/ shaders; hidden unless View > UI meshes is on): {uiMeshes.Count}");
+            foreach (string m in uiMeshes.OrderBy(x => x).Take(40))
+                sb.AppendLine("  " + m);
+            if (uiMeshes.Count > 40)
+                sb.AppendLine($"  ... {uiMeshes.Count - 40} more");
             sb.AppendLine();
 
             sb.AppendLine($"Missing assets (referenced but not found): {missingAssetCount}");

@@ -73,6 +73,7 @@ public partial class MeshView : UserControl
         CheckBox_EmissiveOnly.IsChecked = LevelEditorViewFilter.LightCards;
         CheckBox_HelperIcons.IsChecked = LevelEditorViewFilter.HelperIcons;
         CheckBox_Instancing.IsChecked = LevelEditorViewFilter.Instancing;
+        CheckBox_UiMeshes.IsChecked = LevelEditorViewFilter.UiMeshes;
 
         // Initialize terrain edit mode UI
         if (CheckBox_TerrainEditMode != null)
@@ -97,6 +98,7 @@ public partial class MeshView : UserControl
         LevelEditorViewFilter.LightCards = CheckBox_EmissiveOnly.IsChecked == true;
         LevelEditorViewFilter.HelperIcons = CheckBox_HelperIcons.IsChecked == true;
         LevelEditorViewFilter.Instancing = CheckBox_Instancing.IsChecked == true;
+        LevelEditorViewFilter.UiMeshes = CheckBox_UiMeshes.IsChecked == true;
     }
 
     private void ComboBox_ViewMode_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
