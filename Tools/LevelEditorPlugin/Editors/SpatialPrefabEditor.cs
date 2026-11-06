@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Editors;
 
@@ -56,6 +57,13 @@ public class SpatialPrefabEditor : SpatialEditor
                 },
                 new Controls.DockManager.DockLayoutData()
                 {
+                    UniqueId = DiagnosticsViewModel.Uid,
+                    IsVisible = true,
+                    IsSelected = false,
+                    Location = Controls.DockLocation.BottomRight
+                },
+                new Controls.DockManager.DockLayoutData()
+                {
                     UniqueId = "UID_LevelEditor_Schematics",
                     IsVisible = false,
                     IsSelected = false,
@@ -78,6 +86,7 @@ public class SpatialPrefabEditor : SpatialEditor
             new DockingToolbarItem("", "Show/Hide instances tab", "Images/Instances.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new InstancesViewModel(this, selectedEntity))), DockManager, "UID_LevelEditor_Instances"),
             new DockingToolbarItem("", "Show/Hide properties tab", "Images/Properties.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new PropertiesViewModel(this, selectedEntity))), DockManager, "UID_LevelEditor_Properties"),
             new DockingToolbarItem("", "Show/Hide timeline editor", "Images/Timeline.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new TimelineViewModel(this))), DockManager, "UID_LevelEditor_Timeline"),
+            new DockingToolbarItem("", "Show/Hide diagnostics (load report, log file)", DiagnosticsViewModel.IconPath, new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new DiagnosticsViewModel())), DockManager, DiagnosticsViewModel.Uid),
             new FloatingOnlyDockingToolbarItem("", "Show/Hide schematics editor", "Images/Schematics.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new SchematicsViewModel(this, rootLayer))), DockManager, "UID_LevelEditor_Schematics"),
             new DividerToolbarItem(),
             //new RegularToolbarItem("", "Capture thumbnail preview", "LevelEditorPlugin/Images/CaptureThumbnail.png", new RelayCommand((o) => { CaptureThumbnail(viewport); })),
@@ -106,8 +115,12 @@ public class SpatialPrefabEditor : SpatialEditor
         Stopwatch timer = new Stopwatch();
         timer.Start();
 
+        LoadReport report = LoadReport.Begin(AssetEntry.Name, AssetEntry.Type);
+
         FrostyTaskWindow.Show($"Loading {Path.GetFileName(AssetEntry.Name)}", "", (task) =>
         {
+          try
+          {
             currentLoadingState = new LoadingStateInfo()
             {
                 Task = task,
@@ -128,6 +141,7 @@ public class SpatialPrefabEditor : SpatialEditor
 
             rootLayer = refObj.GetLayer();
 
+            report.EndEntityPhase(true);
             viewport.SetPaused(true);
             screen.AddEntity(refObj);
             screen.ShowTaskWindow = true;
@@ -137,6 +151,14 @@ public class SpatialPrefabEditor : SpatialEditor
             currentLoadingState = null;
 
             world.Initialize();
+          }
+          catch (System.Exception ex)
+          {
+            // Logged for diagnostics; behaviour is unchanged (the exception still propagates).
+            LoadReport.ExceptionDuringLoad($"loading {AssetEntry.Name}", ex);
+            report.EndEntityPhase(false);
+            throw;
+          }
         });
 
         timer.Stop();
@@ -148,5 +170,6 @@ public class SpatialPrefabEditor : SpatialEditor
         DockManager.AddItemOnLoad(new PropertiesViewModel(this, editingWorld));
         DockManager.AddItemOnLoad(new TimelineViewModel(this));
         DockManager.AddItemOnLoad(new SchematicsViewModel(this, rootLayer));
+        DockManager.AddItemOnLoad(new DiagnosticsViewModel());
     }
 }

@@ -4,6 +4,7 @@ using FrostySdk;
 using FrostySdk.IO;
 using LevelEditorPlugin.Managers;
 using System;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Assets;
 
@@ -25,6 +26,7 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
     {
         if (MeshData == null)
         {
+            long diagStart = System.Diagnostics.Stopwatch.GetTimestamp();
             var resEntry = App.AssetManager.GetResEntry(Data.MeshSetResource);
             Resources.MeshSet meshSet = App.AssetManager.GetResAs<Resources.MeshSet>(resEntry);
             MeshMaterialCollection materials = null;
@@ -36,13 +38,17 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
                 {
                     materials = new MeshMaterialCollection(meshEbxAsset, new FrostySdk.Ebx.PointerRef());
                 }
-                catch
+                catch (Exception ex)
                 {
+                    LoadReport.MeshMaterialFailure("reading materials", ex);
                     materials = null;
                 }
             }
 
             MeshData = new Render.MeshRenderable(state, meshSet, lodGroup.Data, materials, resEntry);
+            LoadReport.MeshLoaded(
+                (System.Diagnostics.Stopwatch.GetTimestamp() - diagStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
+                MeshData.UseTexturedRendering);
         }
     }
 

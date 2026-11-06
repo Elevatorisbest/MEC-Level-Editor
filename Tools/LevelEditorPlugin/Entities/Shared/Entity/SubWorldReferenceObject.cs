@@ -2,6 +2,7 @@ using LevelEditorPlugin.Editors;
 using LevelEditorPlugin.Managers;
 using System.Collections.Generic;
 using System.IO;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Entities;
 
@@ -53,12 +54,16 @@ public class SubWorldReferenceObject : ReferenceObject, IEntityData<FrostySdk.Eb
     protected override void Initialize()
     {
         blueprint = LoadedAssetManager.Instance.LoadAsset<Assets.SubWorld>(Data.BundleName);
+        if (blueprint == null)
+            LoadReport.MissingAsset($"sub-world \"{Data.BundleName}\" (BundleName of a SubWorldReferenceObjectData)");
 
         string networkRegistryName = $"{Data.BundleName}_networkregistry_win32";
         string meshVariationName = $"{Data.BundleName}/MeshVariationDb_Win32";
 
         NetworkRegistry = LoadedAssetManager.Instance.LoadAsset<Assets.NetworkRegistryAsset>(networkRegistryName);
         MeshVariationDatabase = LoadedAssetManager.Instance.LoadAsset<Assets.MeshVariationDatabase>(meshVariationName);
+        LoadReport.NameLookup("network registry", networkRegistryName, NetworkRegistry != null);
+        LoadReport.NameLookup("mesh variation db", meshVariationName, MeshVariationDatabase != null);
     }
 
     public Layers.SceneLayer GetLayer()

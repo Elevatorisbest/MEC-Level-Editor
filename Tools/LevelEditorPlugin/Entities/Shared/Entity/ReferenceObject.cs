@@ -15,6 +15,7 @@ using Asset = LevelEditorPlugin.Assets.Asset;
 using DataField = FrostySdk.Ebx.DataField;
 using ObjectBlueprint = LevelEditorPlugin.Assets.ObjectBlueprint;
 using PrefabBlueprint = LevelEditorPlugin.Assets.PrefabBlueprint;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Entities;
 
@@ -218,6 +219,8 @@ public class ReferenceObject : Entity, ISpatialReferenceEntity, ILogicEntity
             uniqueId = world.GenerateDeterministicId(this);
         }
 
+        long subWorldTimer = (this is SubWorldReferenceObject) ? LoadReport.SubWorldStarting() : 0;
+
         Initialize();
         if (blueprint != null)
         {
@@ -228,6 +231,9 @@ public class ReferenceObject : Entity, ISpatialReferenceEntity, ILogicEntity
         }
         SpawnEntities();
         CollectPropertyValues();
+
+        if (subWorldTimer != 0)
+            LoadReport.SubWorldFinished(subWorldTimer, blueprint?.Name ?? "(missing blueprint)", entities.Count);
         //InitializeSchematics();
     }
 

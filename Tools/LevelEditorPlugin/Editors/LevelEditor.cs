@@ -24,6 +24,7 @@ using System.Windows;
 using System.Xml;
 using MeshSet = MeshSetPlugin.Resources.MeshSet;
 using RelayCommand = Frosty.Core.RelayCommand;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Editors;
 
@@ -374,6 +375,13 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
                 },
                 new Controls.DockManager.DockLayoutData()
                 {
+                    UniqueId = DiagnosticsViewModel.Uid,
+                    IsVisible = true,
+                    IsSelected = false,
+                    Location = Controls.DockLocation.BottomRight
+                },
+                new Controls.DockManager.DockLayoutData()
+                {
                     UniqueId = "UID_LevelEditor_Schematics",
                     IsVisible = false,
                     IsSelected = false,
@@ -397,6 +405,7 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide properties tab", "Images/Properties.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new PropertiesViewModel(this, selectedEntity))), DockManager, "UID_LevelEditor_Properties"));
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide terrain layers tab", "Images/Terrain.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new TerrainLayersViewModel(this))), DockManager, "UID_LevelEditor_TerrainLayers"));
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide timeline editor", "Images/Timeline.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new TimelineViewModel(this))), DockManager, "UID_LevelEditor_Timeline"));
+        toolbarItems.Add(new DockingToolbarItem("", "Show/Hide diagnostics (load report, log file)", DiagnosticsViewModel.IconPath, new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new DiagnosticsViewModel())), DockManager, DiagnosticsViewModel.Uid));
         //toolbarItems.Add(new FloatingOnlyDockingToolbarItem("", "Show/Hide schematics editor", "Images/Schematics.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new SchematicsViewModel(this, rootLayer))), DockManager, "UID_LevelEditor_Schematics"));
         //toolbarItems.Add(new RegularToolbarItem("", "Export all visible instances to XML", "LevelEditorPlugin/Images/XMLFile.png", new RelayCommand((o) => { ExportLevelAsXML(); })));
 
@@ -702,25 +711,38 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         Stopwatch timer = new Stopwatch();
         timer.Start();
 
+        LoadReport report = LoadReport.Begin(AssetEntry.Name, AssetEntry.Type);
+
         // first time loading stuff goes here
         FrostyTaskWindow.Show($"Loading {Path.GetFileName(AssetEntry.Name)}", "", (task) =>
         {
-            currentLoadingState = new LoadingStateInfo()
+            try
             {
-                Task = task,
-                Logger = logger
-            };
-            world = new EntityWorld();
-            WorldReferenceObject refObj = new Entities.WorldReferenceObject(Asset.FileGuid, RootObject as WorldData, asset, world);
-            rootLayer = refObj.GetLayer();
-            (screen as LevelEditorScreen).EditorProvider = this;
-            viewport.SetPaused(true);
-            screen.AddEntity(refObj);
-            screen.ShowTaskWindow = true;
-            viewport.SetPaused(false);
-            editingWorld = refObj;
-            currentLoadingState = null;
-            world.Initialize();
+                currentLoadingState = new LoadingStateInfo()
+                {
+                    Task = task,
+                    Logger = logger
+                };
+                world = new EntityWorld();
+                WorldReferenceObject refObj = new Entities.WorldReferenceObject(Asset.FileGuid, RootObject as WorldData, asset, world);
+                rootLayer = refObj.GetLayer();
+                (screen as LevelEditorScreen).EditorProvider = this;
+                report.EndEntityPhase(true);
+                viewport.SetPaused(true);
+                screen.AddEntity(refObj);
+                screen.ShowTaskWindow = true;
+                viewport.SetPaused(false);
+                editingWorld = refObj;
+                currentLoadingState = null;
+                world.Initialize();
+            }
+            catch (Exception ex)
+            {
+                // Logged for diagnostics; behaviour is unchanged (the exception still propagates).
+                LoadReport.ExceptionDuringLoad($"loading level {AssetEntry.Name}", ex);
+                report.EndEntityPhase(false);
+                throw;
+            }
         });
         timer.Stop();
         logger.Log($"Level loaded in {timer.Elapsed.ToString()}");
@@ -732,6 +754,7 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         DockManager.AddItemOnLoad(new PropertiesViewModel(this, editingWorld));
         DockManager.AddItemOnLoad(new TimelineViewModel(this));
         DockManager.AddItemOnLoad(new TerrainLayersViewModel(this));
+        DockManager.AddItemOnLoad(new DiagnosticsViewModel());
         //DockManager.AddItemOnLoad(new SchematicsViewModel(this, rootLayer));
     }
 }

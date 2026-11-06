@@ -19,6 +19,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using D3D11 = SharpDX.Direct3D11;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Screens;
 
@@ -418,11 +419,25 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
     public void AddEntity(Entity entity)
     {
+        // If a level/prefab load is being reported, measure this task as its render phase.
+        LoadReport report = LoadReport.Current;
+
         renderTasks.Enqueue((RenderCreateState state) =>
         {
+            report?.RenderStarting();
             List<RenderProxy> newProxies = [];
-            entity.CreateRenderProxy(newProxies, state);
+            try
+            {
+                entity.CreateRenderProxy(newProxies, state);
+            }
+            catch (Exception ex)
+            {
+                LoadReport.ExceptionDuringLoad($"creating render proxies for {entity.DisplayName}", ex);
+                report?.RenderFinished(newProxies, ex);
+                throw;
+            }
             proxies.AddRange(newProxies);
+            report?.RenderFinished(newProxies);
         });
     }
 
@@ -1130,12 +1145,46 @@ public class LevelEditorScreen : DeferredRenderScreen2
         return ray;
     }
 
+    private static bool gpuInfoLogged;
+
     private void ProcessRenderTasks()
     {
+        if (!gpuInfoLogged)
+        {
+            gpuInfoLogged = true;
+            LogGpuInfo();
+        }
+
         while (renderTasks.Count > 0)
         {
             RenderAction action = renderTasks.Dequeue();
-            action.Invoke(RenderCreateState);
+            try
+            {
+                action.Invoke(RenderCreateState);
+            }
+            catch (Exception ex)
+            {
+                // Logged for diagnostics; behaviour is unchanged (the exception still propagates).
+                LoadReport.ExceptionDuringLoad("render task (creating render proxies)", ex);
+                throw;
+            }
+        }
+    }
+
+    private void LogGpuInfo()
+    {
+        try
+        {
+            using (SharpDX.DXGI.Device dxgiDevice = RenderCreateState.Device.QueryInterface<SharpDX.DXGI.Device>())
+            using (SharpDX.DXGI.Adapter adapter = dxgiDevice.Adapter)
+            {
+                SharpDX.DXGI.AdapterDescription desc = adapter.Description;
+                LevelEditorLog.Info("GPU", $"{desc.Description.Trim()}, dedicated video memory {desc.DedicatedVideoMemory / (1024L * 1024L)} MB, feature level {RenderCreateState.Device.FeatureLevel}");
+            }
+        }
+        catch (Exception ex)
+        {
+            LevelEditorLog.Warning("GPU", "Could not query GPU information", ex);
         }
     }
 }

@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using MeshVariationDatabase = LevelEditorPlugin.Assets.MeshVariationDatabase;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Entities;
 
@@ -151,10 +152,15 @@ public class StaticModelGroupEntity : Entity, IEntityData<FrostySdk.Ebx.StaticMo
         if (inData.MemberDatas == null)
             return;
 
+        // diagnostics counters
+        int diagMembers = 0, diagFromTransforms = 0, diagFromHavok = 0, diagNoTransform = 0;
+        int diagVariationsResolved = 0, diagVariationsUnresolved = 0;
+
         foreach (StaticModelGroupMemberData member in inData.MemberDatas)
         {
             if (member == null)
                 continue;
+            diagMembers++;
 
             for (int i = 0; i < member.InstanceCount; i++)
             {
@@ -170,6 +176,7 @@ public class StaticModelGroupEntity : Entity, IEntityData<FrostySdk.Ebx.StaticMo
                         entityData.Transform = member.InstanceTransforms[i];
                         entityData.Index = totalInstCount;
                         entityData.HavokShapeType = "None";
+                        diagFromTransforms++;
                     }
                     else if (physicsData != null)
                     {
@@ -179,6 +186,7 @@ public class StaticModelGroupEntity : Entity, IEntityData<FrostySdk.Ebx.StaticMo
                         entityData.Index = instCount - 1;
                         entityData.IsHavok = true;
                         entityData.HavokShapeType = physicsData.GetPhysicsShapeType(instCount - 1);
+                        diagFromHavok++;
                     }
 
                     if (member.InstanceObjectVariation != null && i < member.InstanceObjectVariation.Count)
@@ -211,6 +219,16 @@ public class StaticModelGroupEntity : Entity, IEntityData<FrostySdk.Ebx.StaticMo
 
                     totalInstCount++;
                 }
+                else
+                {
+                    diagNoTransform++;
+                }
+
+                if (entityData.ObjectVariationHash != 0)
+                {
+                    if (entityData.ObjectVariation.Type != PointerRefType.Null) diagVariationsResolved++;
+                    else diagVariationsUnresolved++;
+                }
 
                 var createdEntity = CreateEntity(entityData);
                 if (createdEntity != null)
@@ -219,6 +237,9 @@ public class StaticModelGroupEntity : Entity, IEntityData<FrostySdk.Ebx.StaticMo
                 }
             }
         }
+
+        LoadReport.StaticModelGroup(diagMembers, diagFromTransforms, diagFromHavok, diagNoTransform,
+            physicsData != null, diagVariationsResolved, diagVariationsUnresolved);
     }
 
     public virtual Matrix GetTransform()

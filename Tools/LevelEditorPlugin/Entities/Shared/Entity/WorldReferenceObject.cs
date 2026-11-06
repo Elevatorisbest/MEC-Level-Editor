@@ -3,6 +3,7 @@ using FrostySdk.IO;
 using LevelEditorPlugin.Editors;
 using LevelEditorPlugin.Managers;
 using System;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Entities;
 
@@ -35,6 +36,8 @@ public class WorldReferenceObject : SubWorldReferenceObject, IEntityData<WorldRe
 
         NetworkRegistry = LoadedAssetManager.Instance.LoadAsset<Assets.NetworkRegistryAsset>(networkRegistryName);
         MeshVariationDatabase = LoadedAssetManager.Instance.LoadAsset<Assets.MeshVariationDatabase>(meshVariationName);
+        LoadReport.NameLookup("network registry", networkRegistryName, NetworkRegistry != null);
+        LoadReport.NameLookup("mesh variation db", meshVariationName, MeshVariationDatabase != null);
     }
 
     public override object GetPropertyGridData()

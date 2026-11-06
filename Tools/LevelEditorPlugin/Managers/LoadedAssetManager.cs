@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Managers;
 
@@ -45,12 +46,24 @@ public class LoadedAssetManager
     {
         EbxAssetEntry entry = App.AssetManager.GetEbxEntry(assetFileGuid);
         if (entry == null)
+        {
+            LoadReport.MissingAsset($"ebx file {assetFileGuid} (wanted as {typeof(T).Name})");
             return default(T);
+        }
         return LoadAsset<T>(new EbxImportReference() { FileGuid = entry.Guid, ClassGuid = Guid.Empty });
     }
 
     public T LoadAsset<T>(EbxImportReference importRefr) where T : Asset
     {
+        if (!m_loadedAssets.ContainsKey(importRefr) && !m_loadedEbx.ContainsKey(importRefr.FileGuid))
+        {
+            // Diagnostics only: the code below fails on a missing/unreadable asset, so record
+            // which reference it was before that happens.
+            EbxAssetEntry checkEntry = App.AssetManager.GetEbxEntry(importRefr.FileGuid);
+            if (checkEntry == null)
+                LoadReport.MissingAsset($"ebx file {importRefr.FileGuid} / instance {importRefr.ClassGuid} (wanted as {typeof(T).Name}); loading will fail");
+        }
+
         if (!m_loadedAssets.ContainsKey(importRefr))
         {
             EbxAsset ebxAsset = (m_loadedEbx.ContainsKey(importRefr.FileGuid))
@@ -189,7 +202,8 @@ public class LoadedAssetManager
         ebxAsset.Update();
         App.AssetManager.ModifyEbx(entry.Name, ebxAsset);
 
-        App.Logger.Log($"LoadedAssetManager UpdateAsset事件被触发：{entry.Name}");
+        App.Logger.Log("Level editor: asset updated: {0}", entry.Name);
+        LevelEditorLog.Info("Edit", $"Asset modified (ModifyEbx): {entry.Name}");
     }
 
     public void UndoUpdate(Asset asset)
@@ -207,7 +221,8 @@ public class LoadedAssetManager
         //EbxAsset ebxAsset = m_loadedEbx[importRefr.FileGuid].EbxAsset;
         //PopState(entry, m_loadedEbx[importRefr.FileGuid], ebxAsset);
 
-        App.Logger.Log($"LoadedAssetManager UndoUpdate事件被触发：{entry.Name}");
+        App.Logger.Log("Level editor: undo of asset update: {0}", entry.Name);
+        LevelEditorLog.Info("Edit", $"Undo of asset update: {entry.Name}");
     }
 
     public void UnloadAsset(Asset asset)
@@ -252,7 +267,8 @@ public class LoadedAssetManager
         // 改动标记
         if (assetData == null)
         {
-            App.Logger.LogWarning("无法创建资源，AssetData为Null");
+            App.Logger.LogWarning("Level editor: cannot create asset, asset data is null");
+            LoadReport.MissingAsset($"asset data null for file {fileGuid}");
             return null;
         }
 

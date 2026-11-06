@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Entities;
 
@@ -291,6 +292,7 @@ public abstract class Entity : INotifyPropertyChanged, IEbxType
             world?.AddEntity(this);
         }
         instanceGuid = Guid.Parse(data.__InstanceGuid.ToString());
+        LoadReport.EntityCreated(this);
 
         if (this is ISchematicsType)
         {
@@ -414,6 +416,32 @@ public abstract class Entity : INotifyPropertyChanged, IEbxType
         Type objectDataType = objectData.GetType();
         if (entityTypes.ContainsKey(objectDataType))
         {
+            try
+            {
+                return CreateBoundEntity(objectData, objectDataType, parent, inWorld);
+            }
+            catch (Exception ex)
+            {
+                // Logged for diagnostics; behaviour is unchanged (the exception still propagates).
+                LoadReport.ExceptionDuringLoad($"creating entity for {objectDataType.Name}", ex);
+                throw;
+            }
+        }
+
+        LoadReport.UnboundDataType(objectDataType);
+        System.Diagnostics.Debug.WriteLine(objectDataType.ToString());
+
+        //if (objectDataType.IsSubclassOf(typeof(FrostySdk.Ebx.SpatialEntityData)))
+        //    System.Diagnostics.Debug.WriteLine(objectDataType.ToString());
+        //else if (objectDataType.IsSubclassOf(typeof(FrostySdk.Ebx.SpatialReferenceObjectData)))
+        //    System.Diagnostics.Debug.WriteLine(objectDataType.ToString());
+
+        return null;
+    }
+
+    private static Entity CreateBoundEntity(FrostySdk.Ebx.GameObjectData objectData, Type objectDataType, Entity parent, EntityWorld inWorld)
+    {
+        {
             Type objectType = entityTypes[objectDataType];
 
             // 对于StaticModelGroupEntityData类型，使用与level data中相同的方式解析（不传入inWorld参数）
@@ -436,15 +464,6 @@ public abstract class Entity : INotifyPropertyChanged, IEbxType
             // 使用两个参数的构造函数（objectData, parent）
             return (Entity)Activator.CreateInstance(objectType, new object[] { objectData, parent });
         }
-
-        System.Diagnostics.Debug.WriteLine(objectDataType.ToString());
-
-        //if (objectDataType.IsSubclassOf(typeof(FrostySdk.Ebx.SpatialEntityData)))
-        //    System.Diagnostics.Debug.WriteLine(objectDataType.ToString());
-        //else if (objectDataType.IsSubclassOf(typeof(FrostySdk.Ebx.SpatialReferenceObjectData)))
-        //    System.Diagnostics.Debug.WriteLine(objectDataType.ToString());
-
-        return null;
     }
 
     public static Entity CreateEntity(FrostySdk.Ebx.GameObjectData objectData, Guid blueprintGuid, EntityWorld inWorld)

@@ -15,6 +15,7 @@ using D3D11 = SharpDX.Direct3D11;
 using MeshSet = LevelEditorPlugin.Resources.MeshSet;
 using MeshSetLod = LevelEditorPlugin.Resources.MeshSetLod;
 using MeshSetSection = LevelEditorPlugin.Resources.MeshSetSection;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Render;
 
@@ -323,8 +324,9 @@ public class MeshRenderable : BaseRenderable
                     TexturedMesh = new MeshRenderMesh(state, texturedMeshSet, materials, skeleton);
                 }
             }
-            catch
+            catch (System.Exception ex)
             {
+                LoadReport.MeshMaterialFailure("creating textured mesh", ex);
                 TexturedMesh = null;
             }
         }
