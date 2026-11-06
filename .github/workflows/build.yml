@@ -27,7 +27,9 @@ concurrency:
 env:
   CONFIGURATION: Developer - Debug
   PLATFORM: x64
-  OUTDIR: FrostyEditor\bin\Developer\Debug
+  # Not named OUTDIR: MSBuild reads environment variables as properties,
+  # and OUTDIR would override every project's OutDir.
+  EDITOR_BIN: FrostyEditor\bin\Developer\Debug
 
 jobs:
   build:
@@ -78,9 +80,10 @@ jobs:
         run: |
           $env:SolutionDir = "$($PWD.Path)\"
           $required = @('Tools\LevelEditorPlugin\LevelEditorPlugin.csproj')
-          $optional = Get-ChildItem Plugins -Recurse -Filter *.csproj |
-            ForEach-Object { Resolve-Path -Relative $_.FullName } |
-            ForEach-Object { $_.TrimStart('.', '\') }
+          # Only plugin projects that the solution references (skips stray stub
+          # .csproj files such as Plugins\ChunkResExplorerPlugin\ChunkResExplorerPlugin.csproj).
+          $optional = Select-String -Path FrostyLevelEditor.sln -Pattern '"(Plugins\\[^"]+\.csproj)"' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique
           $results = @()
           foreach ($proj in ($required + $optional)) {
             $name = [IO.Path]::GetFileNameWithoutExtension($proj)
@@ -106,7 +109,7 @@ jobs:
       - name: Package editor
         shell: pwsh
         run: |
-          $src = $env:OUTDIR
+          $src = $env:EDITOR_BIN
           $dst = 'package\FrostyEditor'
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
           Copy-Item "$src\*" $dst -Recurse
