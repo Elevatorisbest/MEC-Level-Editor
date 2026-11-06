@@ -1213,7 +1213,9 @@ namespace FrostySdk.Managers
                     patched = true;
             }
 
-            using (EbxReader reader = EbxReader.CreateReader(GetAsset(entry), m_fileSystem, patched))
+            // Reuse the stream fetched above: calling GetAsset(entry) again read and decompressed the
+            // same ebx from the game data a second time (and leaked the first stream).
+            using (EbxReader reader = EbxReader.CreateReader(ebxStream, m_fileSystem, patched))
             {
                 T asset = reader.ReadAsset<T>();
                 if (modifiedResource != null)
@@ -1247,7 +1249,9 @@ namespace FrostySdk.Managers
                 }
             }
 
-            using (EbxReader reader = EbxReader.CreateReader(GetAsset(entry), m_fileSystem, patched))
+            // Reuse the stream fetched above: calling GetAsset(entry) again read and decompressed the
+            // same ebx from the game data a second time (and leaked the first stream).
+            using (EbxReader reader = EbxReader.CreateReader(ebxStream, m_fileSystem, patched))
             {
                 return reader.ReadAsset<EbxAsset>();
             }
