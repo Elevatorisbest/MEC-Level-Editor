@@ -10,7 +10,7 @@ The run produces two artifacts (downloadable from the run's page, bottom section
 
 | Artifact | Contents | Kept for |
 |---|---|---|
-| `FrostyEditor-<commit>` | Runnable editor (`Developer - Debug`, x64), all plugins that built, MEC type SDK only | 5 days |
+| `FrostyEditor-<commit>` | Runnable editor (`Release - Final`, x64), all plugins that built, MEC type SDK only | 5 days |
 | `build-logs-<commit>` | One MSBuild log per project | 7 days |
 
 The run summary page shows a table of which plugins built. `LevelEditorPlugin` must build or the
@@ -30,6 +30,8 @@ Notes:
    `D:\FrostyBuilds\<commit>\`. Nothing needs to go on C:.
 2. Requirements: .NET Framework 4.8 (already installed) and the Microsoft Visual C++ 2015–2022 x64
    redistributable (needed by FrostyHash; usually already installed by games).
+   CI builds `Release - Final` on purpose. A `Developer - Debug` build needs Visual Studio's debug
+   C++ runtime and has the crash handler compiled out, so on a PC without VS it exits silently.
 3. Start `FrostyEditor.exe`, choose your Mirror's Edge Catalyst install as usual.
 4. `BUILD_COMMIT.txt` in the folder says which commit you are running. Include it in test reports.
 

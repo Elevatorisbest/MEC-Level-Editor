@@ -2,7 +2,7 @@
 # GitHub-hosted Windows runner, so no local Visual Studio install is needed.
 #
 # Output: an artifact "FrostyEditor-<sha>" containing the runnable editor
-# (Developer - Debug, x64) with the plugins in its Plugins folder, plus
+# (Release - Final, x64) with the plugins in its Plugins folder, plus
 # "build-logs-<sha>" with the MSBuild logs. No game data is used or produced.
 #
 # See docs/BUILD.md for how to download and run the result.
@@ -25,11 +25,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CONFIGURATION: Developer - Debug
+  # Release - Final, not Developer - Debug: the developer configuration links
+  # FrostyHash against the debug C++ runtime (VCRUNTIME140D.dll/ucrtbased.dll,
+  # only present with Visual Studio installed) and compiles out the crash
+  # handler that writes crashlog.txt (#if !FROSTY_DEVELOPER in App.xaml.cs).
+  CONFIGURATION: Release - Final
   PLATFORM: x64
   # Not named OUTDIR: MSBuild reads environment variables as properties,
   # and OUTDIR would override every project's OutDir.
-  EDITOR_BIN: FrostyEditor\bin\Developer\Debug
+  EDITOR_BIN: FrostyEditor\bin\Release\Final
 
 jobs:
   build:
@@ -123,6 +127,28 @@ jobs:
           $size = (Get-ChildItem $dst -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
           Write-Host ("Package size: {0:N1} MB" -f $size)
           if (-not (Test-Path "$dst\Plugins\LevelEditorPlugin.dll")) { throw "LevelEditorPlugin.dll missing from package" }
+
+      - name: Check package for debug C++ runtime dependencies
+        shell: pwsh
+        run: |
+          # A DLL that imports the debug CRT will not load on a PC without Visual
+          # Studio, and the editor then exits silently. Fail the build instead.
+          # ThirdParty\ealayer3.dll is a prebuilt upstream binary (audio decoding,
+          # loaded only when playing sounds), so it is reported but not fatal.
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe |
+            Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
+          $bad = @()
+          foreach ($f in Get-ChildItem package\FrostyEditor -Recurse -Include *.dll, *.exe) {
+            $deps = & $dumpbin.FullName /nologo /dependents $f.FullName | Select-String -Pattern '(?i)\b(vcruntime140d|msvcp140d|ucrtbased)\.dll'
+            if ($deps) {
+              $rel = $f.FullName.Substring((Resolve-Path package\FrostyEditor).Path.Length + 1)
+              if ($rel -eq 'ThirdParty\ealayer3.dll') { Write-Host "::warning::$rel (prebuilt) needs the debug C++ runtime" }
+              else { $bad += $rel }
+            }
+          }
+          if ($bad) { throw "Debug C++ runtime dependencies in: $($bad -join ', ')" }
+          Write-Host "No debug C++ runtime dependencies in built binaries."
 
       - name: Upload editor
         uses: actions/upload-artifact@v4
