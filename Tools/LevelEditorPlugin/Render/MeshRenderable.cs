@@ -54,6 +54,27 @@ public class MeshSectionRenderable
             case Resources.PrimitiveType.PrimitiveType_TriangleStrip: PrimitiveType = PrimitiveTopology.TriangleStrip; break;
         }
 
+        MeshVertex[] vertices = ReadVertices(section, chunkData);
+        if (isHitProxy)
+        {
+            foreach (MeshVertex vertex in vertices)
+                HitProxyVertices.Add(vertex.Position);
+        }
+
+        int size = (int)(Utilities.SizeOf<MeshVertex>() * section.VertexCount);
+        using (DataStream stream = new DataStream(size, false, true))
+        {
+            stream.WriteRange<MeshVertex>(vertices);
+            stream.Position = 0;
+
+            VertexBuffer = new D3D11.Buffer(state.Device, stream, size, D3D11.ResourceUsage.Default, D3D11.BindFlags.VertexBuffer, D3D11.CpuAccessFlags.None, D3D11.ResourceOptionFlags.None, 0);
+            VertexBufferBinding = new D3D11.VertexBufferBinding(VertexBuffer, VertexStride, 0);
+        }
+    }
+
+    /// <summary>Reads position and normal for every vertex of a section from the mesh chunk.</summary>
+    internal static MeshVertex[] ReadVertices(MeshSetSection section, byte[] chunkData)
+    {
         MeshVertex[] vertices = new MeshVertex[section.VertexCount];
         using (NativeReader reader = new NativeReader(new MemoryStream(chunkData)))
         {
@@ -134,11 +155,6 @@ public class MeshSectionRenderable
                         currentStride += element.Size;
                     }
 
-                    if (isHitProxy)
-                    {
-                        HitProxyVertices.Add(vertex.Position);
-                    }
-
                     vertices[v] = vertex;
 
                     if (currentStride < stream.VertexStride)
@@ -149,15 +165,7 @@ public class MeshSectionRenderable
             }
         }
 
-        int size = (int)(Utilities.SizeOf<MeshVertex>() * section.VertexCount);
-        using (DataStream stream = new DataStream(size, false, true))
-        {
-            stream.WriteRange<MeshVertex>(vertices);
-            stream.Position = 0;
-
-            VertexBuffer = new D3D11.Buffer(state.Device, stream, size, D3D11.ResourceUsage.Default, D3D11.BindFlags.VertexBuffer, D3D11.CpuAccessFlags.None, D3D11.ResourceOptionFlags.None, 0);
-            VertexBufferBinding = new D3D11.VertexBufferBinding(VertexBuffer, VertexStride, 0);
-        }
+        return vertices;
     }
 
     public void Dispose()
@@ -227,7 +235,7 @@ public class MeshLodRenderable : BaseRenderable
         }
     }
 
-    private byte[] GetChunkData(MeshSetLod lod)
+    internal static byte[] GetChunkData(MeshSetLod lod)
     {
         ChunkAssetEntry entry = App.AssetManager.GetChunkEntry(lod.ChunkId);
         byte[] chunkData = lod.InlineData;
@@ -276,14 +284,98 @@ public class MeshLodRenderable : BaseRenderable
     }
 }
 
+/// <summary>
+/// CPU-side copy of LOD0 triangles used for mouse picking. Built the first time a mesh is
+/// ray-tested, instead of for every mesh at load time.
+/// </summary>
+internal sealed class MeshPickingData
+{
+    private sealed class Section
+    {
+        public int StartIndex;
+        public int PrimitiveCount;
+        public Vector3[] Positions;
+    }
+
+    private readonly List<Section> sections = new List<Section>();
+    private readonly int[] indices;
+
+    public MeshPickingData(MeshSetLod lod)
+    {
+        byte[] chunkData = MeshLodRenderable.GetChunkData(lod);
+
+        List<int> indexList = new List<int>();
+        using (NativeReader reader = new NativeReader(new MemoryStream(chunkData)))
+        {
+            reader.Position = lod.VertexBufferSize;
+            long end = System.Math.Min(reader.Length, (long)lod.VertexBufferSize + lod.IndexBufferSize);
+            while (reader.Position < end)
+                indexList.Add(lod.IndexUnitSize == 16 ? reader.ReadUShort() : reader.ReadInt());
+        }
+        indices = indexList.ToArray();
+
+        foreach (MeshSetSection section in lod.Sections)
+        {
+            if (!lod.IsSectionRenderable(section) || section.VertexCount == 0)
+                continue;
+
+            MeshVertex[] vertices = MeshSectionRenderable.ReadVertices(section, chunkData);
+            Vector3[] positions = new Vector3[vertices.Length];
+            for (int i = 0; i < vertices.Length; i++)
+                positions[i] = vertices[i].Position;
+
+            sections.Add(new Section
+            {
+                StartIndex = (int)section.StartIndex,
+                PrimitiveCount = (int)section.PrimitiveCount,
+                Positions = positions
+            });
+        }
+    }
+
+    public bool HitTest(Matrix transform, Ray hitTestRay, out Vector3 hitLocation)
+    {
+        foreach (Section section in sections)
+        {
+            for (int i = 0; i < section.PrimitiveCount; i++)
+            {
+                int i0 = section.StartIndex + (i * 3);
+                if (i0 + 2 >= indices.Length)
+                    break;
+
+                int a = indices[i0], b = indices[i0 + 1], c = indices[i0 + 2];
+                if (a >= section.Positions.Length || b >= section.Positions.Length || c >= section.Positions.Length)
+                    continue;
+
+                Vector3 vertex1 = Vector3.TransformCoordinate(section.Positions[a], transform);
+                Vector3 vertex2 = Vector3.TransformCoordinate(section.Positions[b], transform);
+                Vector3 vertex3 = Vector3.TransformCoordinate(section.Positions[c], transform);
+                if (hitTestRay.Intersects(ref vertex1, ref vertex2, ref vertex3, out hitLocation))
+                    return true;
+            }
+        }
+
+        hitLocation = Vector3.Zero;
+        return false;
+    }
+}
+
+/// <summary>
+/// GPU data for one mesh asset, shared by every proxy that uses the mesh.
+///
+/// The textured (MeshSetPlugin) mesh is built at load time. The untextured position/normal LODs
+/// are only needed for the solid-colour view mode, and the picking triangles only when a mesh is
+/// clicked, so both are built on first use. (Building them for every mesh at load took ~70% of
+/// the render phase of SP_MainCity.) If the textured mesh cannot be built, the untextured LODs are
+/// built immediately as the fallback.
+/// </summary>
 public class MeshRenderable : BaseRenderable
 {
     public BoundingBox Bounds { get; private set; }
-    public List<MeshLodRenderable> Lods { get; private set; } = [];
     public float[] LodDistances { get; private set; } = new float[6];
     public float CullScreenArea { get; private set; } = 0.0f;
 
-    /// <summary>Diagnostics: time spent building the untextured (position/normal) LODs.</summary>
+    /// <summary>Diagnostics: time spent building the untextured (position/normal) LODs at load.</summary>
     public double UntexturedBuildMilliseconds { get; private set; }
     /// <summary>Diagnostics: time spent building the textured MeshSetPlugin mesh, including texture loads.</summary>
     public double TexturedBuildMilliseconds { get; private set; }
@@ -293,9 +385,22 @@ public class MeshRenderable : BaseRenderable
     /// </summary>
     public MeshRenderMesh TexturedMesh { get; private set; }
 
+    private static int lazyUntexturedBuilds;
+
+    private readonly RenderCreateState createState;
+    private readonly MeshSet meshSet;
+    private readonly object lazyLock = new object();
+    private List<MeshLodRenderable> untexturedLods;
+    private MeshPickingData pickingData;
+    private bool pickingFailed;
+    private bool disposed;
+
     public MeshRenderable(RenderCreateState state, MeshSet meshSet, FrostySdk.Ebx.MeshLodGroup lodGroup,
         MeshMaterialCollection materials = null, ResAssetEntry meshResEntry = null)
     {
+        createState = state;
+        this.meshSet = meshSet;
+
         LodDistances[0] = lodGroup.Lod1Distance;
         LodDistances[1] = lodGroup.Lod2Distance;
         LodDistances[2] = lodGroup.Lod3Distance;
@@ -304,24 +409,12 @@ public class MeshRenderable : BaseRenderable
         LodDistances[5] = lodGroup.Lod6Distance;
         CullScreenArea = lodGroup.CullScreenArea;
 
-        long diagStart = System.Diagnostics.Stopwatch.GetTimestamp();
-        bool isHitProxyLod = true;
-        foreach (MeshSetLod lod in meshSet.Lods)
-        {
-            MeshLodRenderable renderLod = new MeshLodRenderable(state, lod, isHitProxyLod);
-            Lods.Add(renderLod);
-
-            isHitProxyLod = false;
-        }
-
         Bounds = new BoundingBox(
             new Vector3(meshSet.BoundingBox.min.x, meshSet.BoundingBox.min.y, meshSet.BoundingBox.min.z),
             new Vector3(meshSet.BoundingBox.max.x, meshSet.BoundingBox.max.y, meshSet.BoundingBox.max.z)
             );
 
         long diagTextured = System.Diagnostics.Stopwatch.GetTimestamp();
-        UntexturedBuildMilliseconds = (diagTextured - diagStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-
         if (materials != null && materials.Count > 0 && meshResEntry != null)
         {
             try
@@ -339,9 +432,19 @@ public class MeshRenderable : BaseRenderable
                 TexturedMesh = null;
             }
         }
-
         TexturedBuildMilliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - diagTextured) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+        if (TexturedMesh == null)
+        {
+            // fallback: untextured is the only way to draw this mesh, build it now
+            long diagStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            EnsureUntexturedLods();
+            UntexturedBuildMilliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - diagStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        }
     }
+
+    /// <summary>Kept for existing callers; builds the untextured LODs if they are not built yet.</summary>
+    public List<MeshLodRenderable> Lods => EnsureUntexturedLods();
 
     public bool UseTexturedRendering => TexturedMesh != null;
 
@@ -351,22 +454,97 @@ public class MeshRenderable : BaseRenderable
     public bool ShouldUseTexturedRendering =>
         UseTexturedRendering && LevelEditorRenderingOptions.UseTexturedModelRendering;
 
+    /// <summary>Returns the LOD to draw, or null if the mesh has nothing drawable.</summary>
     public object GetLod(int index)
     {
         if (ShouldUseTexturedRendering)
         {
             return TexturedMesh.GetLod(index);
         }
-        if (index >= Lods.Count)
-            return Lods[Lods.Count - 1];
-        return Lods[index];
+
+        List<MeshLodRenderable> lods = EnsureUntexturedLods();
+        if (lods.Count == 0)
+            return null;
+        if (index >= lods.Count)
+            return lods[lods.Count - 1];
+        return lods[index];
+    }
+
+    /// <summary>Ray test against LOD0 triangles (built on first call for this mesh).</summary>
+    public bool HitTest(Matrix transform, Ray hitTestRay, out Vector3 hitLocation)
+    {
+        MeshPickingData data = EnsurePickingData();
+        if (data == null)
+        {
+            // could not read the mesh: fall back to the bounding box test the caller already passed
+            hitLocation = transform.TranslationVector;
+            return true;
+        }
+        return data.HitTest(transform, hitTestRay, out hitLocation);
+    }
+
+    private List<MeshLodRenderable> EnsureUntexturedLods()
+    {
+        lock (lazyLock)
+        {
+            if (untexturedLods != null)
+                return untexturedLods;
+
+            List<MeshLodRenderable> lods = new List<MeshLodRenderable>();
+            if (!disposed)
+            {
+                if (TexturedMesh != null)
+                {
+                    int n = System.Threading.Interlocked.Increment(ref lazyUntexturedBuilds);
+                    if (n == 1)
+                        LevelEditorLog.Info("Mesh", "Solid colour mode: building untextured meshes on demand. The first frames can be slow on large levels.");
+                }
+
+                foreach (MeshSetLod lod in meshSet.Lods)
+                    lods.Add(new MeshLodRenderable(createState, lod, false));
+            }
+            untexturedLods = lods;
+            return untexturedLods;
+        }
+    }
+
+    private MeshPickingData EnsurePickingData()
+    {
+        lock (lazyLock)
+        {
+            if (pickingData != null || pickingFailed || disposed)
+                return pickingData;
+
+            try
+            {
+                if (meshSet.Lods.Count > 0)
+                    pickingData = new MeshPickingData(meshSet.Lods[0]);
+                else
+                    pickingFailed = true;
+            }
+            catch (System.Exception ex)
+            {
+                pickingFailed = true;
+                LevelEditorLog.Warning("Picking", "Could not read mesh triangles for picking; using bounding box", ex);
+            }
+            return pickingData;
+        }
     }
 
     public void Dispose()
     {
-        TexturedMesh?.Dispose();
-        TexturedMesh = null;
-        foreach (MeshLodRenderable lod in Lods)
-            lod.Dispose();
+        lock (lazyLock)
+        {
+            disposed = true;
+            TexturedMesh?.Dispose();
+            TexturedMesh = null;
+            if (untexturedLods != null)
+            {
+                foreach (MeshLodRenderable lod in untexturedLods)
+                    lod.Dispose();
+                untexturedLods = null;
+            }
+            pickingData = null;
+        }
     }
 }

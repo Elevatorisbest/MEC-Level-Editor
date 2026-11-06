@@ -13,10 +13,10 @@ public class ModelRenderProxy : RenderProxy
     protected MeshRenderable renderData;
     protected int lodIndex;
 
+    // Shared by all proxies (owned by the screen's shader library); never disposed here.
     private ShaderPermutation permutation;
-    private D3D11.Buffer pixelParameters;
-    private List<D3D11.ShaderResourceView> pixelTextures = [];
-    private MeshMaterial material;
+    private readonly RenderCreateState createState;
+    private bool isSelected;
 
     private static GeometryDeclarationDesc GeometryDecl = GeometryDeclarationDesc.Create(new GeometryDeclarationDesc.Element[]
     {
@@ -36,30 +36,14 @@ public class ModelRenderProxy : RenderProxy
         : base(owner)
     {
         renderData = meshData;
+        createState = state;
 
         RecalculateBoundingBox();
 
-        material = new MeshMaterial();
-        material.VectorParameters.Add(
-            new FrostySdk.Ebx.VectorShaderParameter()
-            {
-                ParameterName = "Color",
-                ParameterType = FrostySdk.Ebx.ShaderParameterType.ShaderParameterType_Vec4,
-                Value = new FrostySdk.Ebx.Vec4()
-                {
-                    // 2026/01/19
-                    // Change marker
-                    x = OwnerEntity.Owner?.Layer?.LayerColor.Red ?? 1.0f,
-                    y = OwnerEntity.Owner?.Layer?.LayerColor.Green ?? 1.0f,
-                    z = OwnerEntity.Owner?.Layer?.LayerColor.Blue ?? 1.0f,
-                    w = 1.0f
-                }
-            });
-
+        // The solid-colour constant buffer is no longer created per proxy here; see Render.
         permutation = state.ShaderLibrary.GetUserShader("LevelShader", GeometryDecl);
         permutation.IsTwoSided = true;
         permutation.LoadShaders(state.Device);
-        permutation.AssignParameters(state, material, ref pixelParameters, ref pixelTextures);
     }
 
     public ModelRenderProxy(RenderCreateState state, MeshProxyEntity owner)
@@ -115,12 +99,17 @@ public class ModelRenderProxy : RenderProxy
             }
             else
             {
-                // Non-textured rendering: uses LevelShader solid color
-                permutation.SetState(context, renderPath);
-                context.PixelShader.SetShaderResources(1, pixelTextures.ToArray());
-                context.PixelShader.SetConstantBuffer(2, pixelParameters);
+                // Non-textured rendering: uses LevelShader solid color (layer colour, yellow when selected)
+                MeshRenderBase lod = renderData.GetLod(lodIndex) as MeshRenderBase;
+                if (lod == null)
+                    return;
 
-                ((MeshRenderBase)renderData.GetLod(lodIndex)).Render(context, renderPath);
+                SolidColorParameterCache.Entry colorParams = GetSolidColorParameters();
+                permutation.SetState(context, renderPath);
+                context.PixelShader.SetShaderResources(1, colorParams.PixelTextures);
+                context.PixelShader.SetConstantBuffer(2, colorParams.PixelParameters);
+
+                lod.Render(context, renderPath);
             }
         }
     }
@@ -146,23 +135,25 @@ public class ModelRenderProxy : RenderProxy
 
     public override void SetSelected(RenderCreateState state, bool newSelected)
     {
-        material.SetVectorParameter("Color", newSelected
-            ? new FrostySdk.Ebx.Vec4() { x = 1.0f, y = 1.0f, z = 0.0f, w = 1.0f }
-            : new FrostySdk.Ebx.Vec4()
-            {
-                // 2026/01/19
-                // Change marker
-                x = OwnerEntity.Owner?.Layer?.LayerColor.Red ?? 1.0f,
-                y = OwnerEntity.Owner?.Layer?.LayerColor.Green ?? 1.0f,
-                z = OwnerEntity.Owner?.Layer?.LayerColor.Blue ?? 1.0f,
-                w = 1.0f
-            });
-        permutation.AssignParameters(state, material, ref pixelParameters, ref pixelTextures);
+        isSelected = newSelected;
+    }
+
+    private SolidColorParameterCache.Entry GetSolidColorParameters()
+    {
+        if (isSelected)
+            return SolidColorParameterCache.Get(createState, permutation, 1.0f, 1.0f, 0.0f, 1.0f);
+
+        // 2026/01/19 Change marker: colour of the owning layer
+        return SolidColorParameterCache.Get(createState, permutation,
+            OwnerEntity.Owner?.Layer?.LayerColor.Red ?? 1.0f,
+            OwnerEntity.Owner?.Layer?.LayerColor.Green ?? 1.0f,
+            OwnerEntity.Owner?.Layer?.LayerColor.Blue ?? 1.0f,
+            1.0f);
     }
 
     public override bool HitTest(Ray hitTestRay, out Vector3 hitLocation)
     {
-        return renderData.Lods[0].HitTest(Transform, hitTestRay, out hitLocation);
+        return renderData.HitTest(Transform, hitTestRay, out hitLocation);
     }
 
     public override void RecalculateBoundingBox()
@@ -176,9 +167,8 @@ public class ModelRenderProxy : RenderProxy
     public override void Dispose()
     {
         // renderData is shared by every proxy using the same mesh and owned (and disposed) by
-        // MeshAsset, so it must not be disposed here.
-        permutation.Dispose();
-        pixelParameters.Dispose();
-        pixelTextures.Clear();
+        // MeshAsset; the shader permutation and solid-colour parameters are shared by all
+        // proxies. Nothing here is owned by this proxy.
+        permutation = null;
     }
 }

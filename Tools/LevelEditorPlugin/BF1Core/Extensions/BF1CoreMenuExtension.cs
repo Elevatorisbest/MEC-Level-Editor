@@ -22,7 +22,8 @@ public class BF1CoreMenuExtension : MenuExtension
             }
 
             HotKey.AddKey(Keys.F1);
-            HotKey.AddKey(Keys.F5);
+            // F5 ("copy mesh to camera") is not registered: Frosty uses F5 for Launch, so one
+            // key press both added a copy and launched the game. Use the window's button instead.
             HotKey.Run();
         });
     }

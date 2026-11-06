@@ -478,8 +478,8 @@ public sealed class LoadReport
 
             sb.AppendLine("Meshes");
             sb.AppendLine($"  mesh resources loaded: {meshesLoaded} ({meshesTextured} with textured path, {meshesUntextured} untextured only), total mesh load time {Seconds(meshLoadMilliseconds)}");
-            sb.AppendLine($"    building untextured LODs (position/normal + picking copy): {Seconds(meshUntexturedMilliseconds)}");
-            sb.AppendLine($"    building textured mesh (second copy of geometry + material textures): {Seconds(meshTexturedMilliseconds)}");
+            sb.AppendLine($"    building untextured LODs at load (only meshes without a textured path; others on demand in solid-colour mode): {Seconds(meshUntexturedMilliseconds)}");
+            sb.AppendLine($"    building textured mesh (geometry + material textures): {Seconds(meshTexturedMilliseconds)}");
             sb.AppendLine($"    other (reading the mesh resource, materials): {Seconds(Math.Max(0, meshLoadMilliseconds - meshUntexturedMilliseconds - meshTexturedMilliseconds))}");
             sb.AppendLine($"  textures: {textureSummary ?? "n/a"}");
             if (meshMaterialFailures.Count > 0)

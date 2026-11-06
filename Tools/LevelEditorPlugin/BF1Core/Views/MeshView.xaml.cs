@@ -107,9 +107,6 @@ public partial class MeshView : UserControl
                 case Keys.F1:
                     Button_SnapToCam_Click(null, null);
                     break;
-                case Keys.F5:
-                    Button_CopyMeshToCamera_Click(null, null);
-                    break;
             }
         });
     }

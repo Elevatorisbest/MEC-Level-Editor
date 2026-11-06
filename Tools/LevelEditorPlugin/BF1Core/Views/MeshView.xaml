@@ -198,7 +198,7 @@
                         <Button
                             x:Name="Button_CopyMeshToCamera"
                             Click="Button_CopyMeshToCamera_Click"
-                            Content="Copy Model to Camera (F5)"
+                            Content="Copy Model to Camera"
                             Foreground="#FEDB1D" />
                     </WrapPanel>
 
