@@ -4,6 +4,7 @@ using FrostySdk;
 using FrostySdk.IO;
 using LevelEditorPlugin.Managers;
 using System;
+using System.Collections.Generic;
 using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Assets;
@@ -37,6 +38,7 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
                 try
                 {
                     materials = new MeshMaterialCollection(meshEbxAsset, new FrostySdk.Ebx.PointerRef());
+                    RecordMaterials(materials);
                 }
                 catch (Exception ex)
                 {
@@ -51,6 +53,34 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
                 MeshData.UseTexturedRendering,
                 MeshData.UntexturedBuildMilliseconds,
                 MeshData.TexturedBuildMilliseconds);
+        }
+    }
+
+    private void RecordMaterials(MeshMaterialCollection collection)
+    {
+        if (LoadReport.Current == null)
+            return;
+        try
+        {
+            string meshName = App.AssetManager.GetEbxEntry(FileGuid)?.Name ?? FileGuid.ToString();
+            foreach (MeshMaterial material in collection)
+            {
+                List<string> names = new List<string>();
+                foreach (dynamic parameter in material.TextureParameters)
+                    names.Add((string)parameter.ParameterName);
+
+                string shaderName = null;
+                if (material.Shader.Type == PointerRefType.External)
+                    shaderName = App.AssetManager.GetEbxEntry(material.Shader.External.FileGuid)?.Name;
+                else if (material.Shader.Type == PointerRefType.Internal)
+                    shaderName = "(internal shader)";
+
+                LoadReport.MaterialSeen(meshName, shaderName, names);
+            }
+        }
+        catch (Exception ex)
+        {
+            LevelEditorLog.Debug("Material", $"Could not record materials: {ex.Message}");
         }
     }
 

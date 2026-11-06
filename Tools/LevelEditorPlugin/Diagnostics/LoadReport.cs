@@ -117,6 +117,12 @@ public sealed class LoadReport
     private string textureSummary;
     private readonly List<string> timings = new List<string>();
     private readonly Dictionary<string, long[]> exclusiveTimes = new Dictionary<string, long[]>();
+
+    // material diagnostics (which texture parameter names MEC materials use)
+    private int materialsSeen, materialsWithoutDiffuse, materialsWithoutTextures;
+    private readonly Dictionary<string, int> textureParamNames = new Dictionary<string, int>();
+    private readonly Dictionary<string, int[]> materialShaders = new Dictionary<string, int[]>();
+    private readonly List<string> noDiffuseExamples = new List<string>();
     private string gpuMemorySummary;
     private int totalProxies;
 
@@ -436,6 +442,40 @@ public sealed class LoadReport
             gpuMemorySummary = summary;
     }
 
+    /// <summary>
+    /// Records one mesh material. "Diffuse" follows Frosty's fallback shader for Mirror's Edge
+    /// Catalyst, which only uses a colour texture whose parameter name starts with "Diffuse".
+    /// </summary>
+    public static void MaterialSeen(string meshName, string shaderName, List<string> textureParams)
+    {
+        LoadReport r = Current;
+        if (r == null)
+            return;
+
+        bool hasDiffuse = textureParams.Exists(n => n != null && n.StartsWith("Diffuse"));
+        lock (r.sync)
+        {
+            r.materialsSeen++;
+            if (textureParams.Count == 0) r.materialsWithoutTextures++;
+            if (!hasDiffuse) r.materialsWithoutDiffuse++;
+
+            foreach (string name in textureParams)
+                Increment(r.textureParamNames, name ?? "(null)");
+
+            string shaderKey = shaderName ?? "(no shader)";
+            if (!r.materialShaders.TryGetValue(shaderKey, out int[] counts))
+            {
+                counts = new int[2];
+                r.materialShaders.Add(shaderKey, counts);
+            }
+            counts[0]++;
+            if (!hasDiffuse) counts[1]++;
+
+            if (!hasDiffuse && textureParams.Count > 0 && r.noDiffuseExamples.Count < 40)
+                r.noDiffuseExamples.Add($"{meshName} | shader {shaderKey} | textures: {string.Join(", ", textureParams)}");
+        }
+    }
+
     public static void MeshMaterialFailure(string stage, Exception ex)
     {
         LoadReport r = Current;
@@ -566,6 +606,18 @@ public sealed class LoadReport
             }
             sb.AppendLine($"  render proxies: {totalProxies}");
             AppendCounts(sb, proxyTypes, 20);
+            sb.AppendLine();
+
+            sb.AppendLine("Materials (texture parameter names; the MEC fallback shader only takes a colour texture named Diffuse*)");
+            sb.AppendLine($"  materials: {materialsSeen}, without a Diffuse* texture: {materialsWithoutDiffuse}, without any texture: {materialsWithoutTextures}");
+            sb.AppendLine("  texture parameter names (count):");
+            AppendCounts(sb, textureParamNames, 60);
+            sb.AppendLine("  shaders (materials, of which without Diffuse*), top 40:");
+            foreach (KeyValuePair<string, int[]> kv in materialShaders.OrderByDescending(k => k.Value[0]).Take(40))
+                sb.AppendLine($"  {kv.Value[0],8} {kv.Value[1],8}  {kv.Key}");
+            sb.AppendLine("  examples of materials with textures but no Diffuse*:");
+            foreach (string e in noDiffuseExamples)
+                sb.AppendLine("    " + e);
             sb.AppendLine();
 
             sb.AppendLine($"Missing assets (referenced but not found): {missingAssetCount}");
