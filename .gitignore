@@ -295,3 +295,27 @@ __pycache__/
 *.lib
 /FrostyEditor/MigrationBackup
 /Plugins/LevelEditorOldPlugin
+
+# ---------------------------------------------------------------
+# Frosty / game data - never commit anything extracted from or
+# derived from the game install (added for MEC Level Editor work)
+# ---------------------------------------------------------------
+*.fbproject
+*.fbmod
+*.fbpbak
+*.cas
+*.cat
+*.toc
+*.sb
+**/Caches/
+**/Mods/
+# ExportLevelAsXML output (FBX/OBJ of game meshes)
+**/Levels/
+# Captured viewport thumbnails
+**/Thumbnails/
+crashlog.txt
+# Level editor diagnostic logs
+**/LevelEditorLogs/
+# Credentials, never
+*.pat
+.env
