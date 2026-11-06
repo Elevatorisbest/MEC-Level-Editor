@@ -19,7 +19,8 @@ public sealed class FrameStats
     private int frames;
     private double sumFrameMs, maxFrameMs;
     private double sumCollectMs, sumSortMs, sumDrawMs;
-    private long sumVisible, sumDraws;
+    private long sumVisible, sumDraws, sumCandidates;
+    private double sumUpdateMs;
     private int lastProxyCount;
 
     public FrameStats(string name)
@@ -53,12 +54,15 @@ public sealed class FrameStats
         }
     }
 
-    public void Collected(double ms, int proxyCount, int visibleCount)
+    public void Collected(double ms, int proxyCount, int visibleCount, int candidateCount)
     {
         sumCollectMs += ms;
         sumVisible += visibleCount;
+        sumCandidates += candidateCount;
         lastProxyCount = proxyCount;
     }
+
+    public void Updated(double ms) => sumUpdateMs += ms;
 
     public void Sorted(double ms) => sumSortMs += ms;
 
@@ -76,11 +80,13 @@ public sealed class FrameStats
         double avgFrame = sumFrameMs / frames;
         LevelEditorLog.Info("Frame",
             $"{name}: {1000.0 / avgFrame:N1} fps (frame avg {avgFrame:N1} ms, worst {maxFrameMs:N1} ms over {frames} frames) | " +
-            $"culling {sumCollectMs / frames:N1} ms ({lastProxyCount} proxies, {sumVisible / frames} visible) | " +
+            $"proxy updates {sumUpdateMs / frames:N1} ms | " +
+            $"culling {sumCollectMs / frames:N1} ms ({lastProxyCount} proxies, {sumCandidates / frames} tested, {sumVisible / frames} visible) | " +
             $"sorting {sumSortMs / frames:N1} ms | mesh draws {sumDrawMs / frames:N1} ms ({sumDraws / frames} instances)");
 
         frames = 0;
         sumFrameMs = maxFrameMs = sumCollectMs = sumSortMs = sumDrawMs = 0;
-        sumVisible = sumDraws = 0;
+        sumVisible = sumDraws = sumCandidates = 0;
+        sumUpdateMs = 0;
     }
 }

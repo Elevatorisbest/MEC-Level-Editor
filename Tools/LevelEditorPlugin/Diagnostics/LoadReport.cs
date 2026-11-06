@@ -40,6 +40,7 @@ public sealed class LoadReport
         public long WorkingSet;
         public long PrivateBytes;
         public long Managed;
+        public int Gen0, Gen1, Gen2;
 
         public static Memory Capture()
         {
@@ -52,6 +53,9 @@ public sealed class LoadReport
                     m.PrivateBytes = p.PrivateMemorySize64;
                 }
                 m.Managed = GC.GetTotalMemory(false);
+                m.Gen0 = GC.CollectionCount(0);
+                m.Gen1 = GC.CollectionCount(1);
+                m.Gen2 = GC.CollectionCount(2);
             }
             catch
             {
@@ -60,7 +64,7 @@ public sealed class LoadReport
         }
 
         public override string ToString() =>
-            $"working set {Mb(WorkingSet)}, private {Mb(PrivateBytes)}, managed heap {Mb(Managed)}";
+            $"working set {Mb(WorkingSet)}, private {Mb(PrivateBytes)}, managed heap {Mb(Managed)} (GCs so far: gen0 {Gen0}, gen1 {Gen1}, gen2 {Gen2})";
     }
 
     private readonly object sync = new object();
@@ -233,6 +237,8 @@ public sealed class LoadReport
         {
         }
 
+        CompactAfterLoad();
+
         try
         {
             ReportCompleted?.Invoke(this);
@@ -241,6 +247,34 @@ public sealed class LoadReport
         {
             LevelEditorLog.Warning("Load", "ReportCompleted handler failed", ex);
         }
+    }
+
+    /// <summary>
+    /// Loading allocates many large temporary arrays (mesh chunks, texture data) on the large
+    /// object heap, which .NET does not compact by default, so freed memory can stay committed.
+    /// Run one compacting collection after a load and log how much it gave back.
+    /// </summary>
+    private void CompactAfterLoad()
+    {
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                Memory before = Memory.Capture();
+                Stopwatch timer = Stopwatch.StartNew();
+                System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+                GC.WaitForPendingFinalizers();
+                timer.Stop();
+                Memory after = Memory.Capture();
+                LevelEditorLog.Info("Memory", $"Post-load compacting GC took {timer.Elapsed.TotalMilliseconds:N0} ms. " +
+                    $"Before: {before}. After: {after}. Private bytes freed: {Mb(before.PrivateBytes - after.PrivateBytes)}");
+            }
+            catch (Exception ex)
+            {
+                LevelEditorLog.Warning("Memory", "Post-load compacting GC failed", ex);
+            }
+        });
     }
 
     #endregion

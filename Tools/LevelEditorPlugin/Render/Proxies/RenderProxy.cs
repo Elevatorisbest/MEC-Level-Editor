@@ -11,10 +11,29 @@ public abstract class RenderProxy : MeshRenderBase
 {
     public float CurrentDistanceToCamera { get; set; }
     public Matrix Transform { get; protected set; }
-    public BoundingBox BoundingBox { get; protected set; }
+    public BoundingBox BoundingBox
+    {
+        get => boundingBox;
+        protected set
+        {
+            boundingBox = value;
+            // Subclasses set the box directly without calling base.RecalculateBoundingBox, so the
+            // cached sphere is invalidated here (it used to stay stale after an object moved).
+            boundingSphereDirty = true;
+            Grid?.OnBoundsChanged(this, value);
+        }
+    }
     public Entity OwnerEntity { get; protected set; }
 
+    private BoundingBox boundingBox;
     private BoundingSphere cachedBoundingSphere;
+
+    // Culling grid bookkeeping (see ProxyGrid). Only touched by the grid.
+    internal ProxyGrid Grid;
+    internal BoundingBox GridBounds;
+    internal Vector3 GridTranslation;
+    internal float GridRadius;
+    internal bool GridDynamic;
     private bool boundingSphereDirty = true;
 
     /// <summary>

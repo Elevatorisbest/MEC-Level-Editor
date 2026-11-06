@@ -400,6 +400,10 @@ public class LevelEditorScreen : DeferredRenderScreen2
     private Queue<RenderAction> renderTasks = new Queue<RenderAction>();
     private List<RenderProxy> proxies = [];
 
+    // Spatial grid used by culling and picking; built lazily, see EnsureProxyGrid.
+    private ProxyGrid proxyGrid;
+    private readonly List<RenderProxy> cullCandidates = [];
+
     private TranslateGizmo translateGizmo;
     private BindableDepthTexture gizmoDepthTexture;
 
@@ -437,6 +441,12 @@ public class LevelEditorScreen : DeferredRenderScreen2
                 throw;
             }
             proxies.AddRange(newProxies);
+            if (proxyGrid != null)
+            {
+                // added after the grid was built (e.g. a copy): always test until the next rebuild
+                foreach (RenderProxy newProxy in newProxies)
+                    proxyGrid.MarkDynamic(newProxy);
+            }
             report?.SetTextureSummary(TextureLibraryStats.Summarize(state.TextureLibrary));
             report?.SetGpuMemorySummary(QueryGpuMemory(state.Device));
             report?.RenderFinished(newProxies);
@@ -455,6 +465,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
             {
                 proxies.Remove(renderProxy);
             }
+            InvalidateProxyGrid();
         });
     }
 
@@ -476,8 +487,10 @@ public class LevelEditorScreen : DeferredRenderScreen2
             }
         }
 
+        long diagUpdateStart = System.Diagnostics.Stopwatch.GetTimestamp();
         foreach (RenderProxy proxy in proxies)
             proxy.Update(RenderCreateState);
+        frameStats.Updated(ElapsedMs(diagUpdateStart));
     }
 
     public void CaptureThumbnail(string path)
@@ -595,6 +608,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
         foreach (RenderProxy proxy in proxies)
             proxy.Dispose();
 
+        InvalidateProxyGrid();
         proxies.Clear();
         selectedProxies.Clear();
 
@@ -701,7 +715,14 @@ public class LevelEditorScreen : DeferredRenderScreen2
         List<MeshRenderInstance> instancesInView = [];
 
         sprites.Clear();
-        foreach (RenderProxy proxy in proxies)
+        EnsureProxyGrid();
+        cullCandidates.Clear();
+        if (proxyGrid != null)
+            proxyGrid.CollectCandidates(cameraFrustum, worldMatrix.TranslationVector, MinScreenSizeCull, cullCandidates);
+        else
+            cullCandidates.AddRange(proxies);
+
+        foreach (RenderProxy proxy in cullCandidates)
         {
             float dist = (proxy.Transform.TranslationVector - worldMatrix.TranslationVector).Length();
             float width = cameraFrustum.GetWidthAtDepth(dist);
@@ -744,8 +765,30 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         D3DUtils.EndPerfEvent(Viewport.Context);
 
-        frameStats.Collected(ElapsedMs(diagCollectStart), proxies.Count, instancesInView.Count);
+        frameStats.Collected(ElapsedMs(diagCollectStart), proxies.Count, instancesInView.Count, cullCandidates.Count);
         return instancesInView;
+    }
+
+    /// <summary>Builds the culling grid if needed, or rebuilds it once many proxies have moved.</summary>
+    private void EnsureProxyGrid()
+    {
+        if (proxies.Count == 0)
+            return;
+
+        if (proxyGrid != null && proxyGrid.DynamicCount < ProxyGrid.RebuildDynamicThreshold)
+            return;
+
+        if (proxyGrid != null)
+            LevelEditorLog.Info("Render", $"Rebuilding culling grid ({proxyGrid.DynamicCount} proxies moved or added since the last build)");
+
+        proxyGrid?.Detach(proxies);
+        proxyGrid = ProxyGrid.Build(proxies);
+    }
+
+    private void InvalidateProxyGrid()
+    {
+        proxyGrid?.Detach(proxies);
+        proxyGrid = null;
     }
 
     private static double ElapsedMs(long start) =>
@@ -835,7 +878,15 @@ public class LevelEditorScreen : DeferredRenderScreen2
         BoundingFrustum cameraFrustum = BoundingFrustum.FromCamera(worldMatrix.TranslationVector, worldMatrix.Backward, worldMatrix.Down, currentCamera.FOV, currentCamera.GetNearClip(), currentCamera.GetFarClip(), currentCamera.AspectRatio);
         List<MeshRenderInstance> instancesInView = [];
 
-        foreach (RenderProxy proxy in proxies)
+        // Picking runs on the UI thread; use the grid built by the render thread if there is one.
+        ProxyGrid grid = proxyGrid;
+        List<RenderProxy> candidates = new List<RenderProxy>();
+        if (grid != null)
+            grid.CollectCandidates(cameraFrustum, worldMatrix.TranslationVector, 0.0f, candidates);
+        else
+            candidates.AddRange(proxies);
+
+        foreach (RenderProxy proxy in candidates)
         {
             float dist = (proxy.Transform.TranslationVector - worldMatrix.TranslationVector).Length();
             float width = cameraFrustum.GetWidthAtDepth(dist);
