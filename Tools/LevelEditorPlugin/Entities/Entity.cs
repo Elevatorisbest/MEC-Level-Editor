@@ -416,6 +416,7 @@ public abstract class Entity : INotifyPropertyChanged, IEbxType
         Type objectDataType = objectData.GetType();
         if (entityTypes.ContainsKey(objectDataType))
         {
+            long timing = LoadTiming.Enter();
             try
             {
                 return CreateBoundEntity(objectData, objectDataType, parent, inWorld);
@@ -425,6 +426,10 @@ public abstract class Entity : INotifyPropertyChanged, IEbxType
                 // Logged for diagnostics; behaviour is unchanged (the exception still propagates).
                 LoadReport.ExceptionDuringLoad($"creating entity for {objectDataType.Name}", ex);
                 throw;
+            }
+            finally
+            {
+                LoadTiming.Exit(timing, objectDataType.Name);
             }
         }
 

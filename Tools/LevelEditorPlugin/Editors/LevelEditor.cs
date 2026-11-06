@@ -766,6 +766,11 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         TimedDockLoad(report, "Timeline panel", () => new TimelineViewModel(this));
         TimedDockLoad(report, "Terrain layers panel", () => new TerrainLayersViewModel(this));
         TimedDockLoad(report, "Diagnostics panel", () => new DiagnosticsViewModel());
+
+        // Panel layout/rendering happens after this method returns; measure until the UI thread is idle.
+        Stopwatch uiIdleTimer = Stopwatch.StartNew();
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() =>
+            report.AddTiming("UI: panel layout until UI thread idle", uiIdleTimer.Elapsed.TotalMilliseconds)));
         //DockManager.AddItemOnLoad(new SchematicsViewModel(this, rootLayer));
     }
 }

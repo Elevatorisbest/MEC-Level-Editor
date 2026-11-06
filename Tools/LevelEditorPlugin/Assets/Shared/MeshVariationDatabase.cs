@@ -4,6 +4,7 @@ using FrostySdk.IO;
 using FrostySdk.Managers.Entries;
 using System;
 using System.Collections.Generic;
+using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Assets;
 
@@ -26,12 +27,21 @@ public class MeshVariationDatabase : Asset, IAssetData<FrostySdk.Ebx.MeshVariati
 
         if (variationNameCache.Count == 0)
         {
-            foreach (EbxAssetEntry ebxEntry in App.AssetManager.EnumerateEbx("ObjectVariation"))
+            long timing = LoadTiming.Enter();
+            try
             {
-                EbxAsset ebxAsset = App.AssetManager.GetEbx(ebxEntry);
-                ObjectVariation variation = ebxAsset.RootObject as ObjectVariation;
+                foreach (EbxAssetEntry ebxEntry in App.AssetManager.EnumerateEbx("ObjectVariation"))
+                {
+                    EbxAsset ebxAsset = App.AssetManager.GetEbx(ebxEntry);
+                    ObjectVariation variation = ebxAsset.RootObject as ObjectVariation;
 
-                variationNameCache.Add(variation.NameHash, new FrostySdk.IO.EbxImportReference() { FileGuid = ebxEntry.Guid, ClassGuid = ebxAsset.RootInstanceGuid });
+                    variationNameCache.Add(variation.NameHash, new FrostySdk.IO.EbxImportReference() { FileGuid = ebxEntry.Guid, ClassGuid = ebxAsset.RootInstanceGuid });
+                }
+                LevelEditorLog.Info("Load", $"Object variation cache built: {variationNameCache.Count} variations");
+            }
+            finally
+            {
+                LoadTiming.Exit(timing, "(object variation name cache, built once per session)");
             }
         }
 

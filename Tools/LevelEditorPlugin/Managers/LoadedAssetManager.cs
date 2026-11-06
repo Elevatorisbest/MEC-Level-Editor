@@ -66,9 +66,23 @@ public class LoadedAssetManager
 
         if (!m_loadedAssets.ContainsKey(importRefr))
         {
-            EbxAsset ebxAsset = (m_loadedEbx.ContainsKey(importRefr.FileGuid))
-                ? m_loadedEbx[importRefr.FileGuid].EbxAsset
-                : App.AssetManager.GetEbx(App.AssetManager.GetEbxEntry(importRefr.FileGuid));
+            EbxAsset ebxAsset;
+            if (m_loadedEbx.ContainsKey(importRefr.FileGuid))
+            {
+                ebxAsset = m_loadedEbx[importRefr.FileGuid].EbxAsset;
+            }
+            else
+            {
+                long timing = LoadTiming.Enter();
+                try
+                {
+                    ebxAsset = App.AssetManager.GetEbx(App.AssetManager.GetEbxEntry(importRefr.FileGuid));
+                }
+                finally
+                {
+                    LoadTiming.Exit(timing, "(read ebx asset: AssetManager.GetEbx)");
+                }
+            }
 
             if (importRefr.ClassGuid == Guid.Empty)
             {

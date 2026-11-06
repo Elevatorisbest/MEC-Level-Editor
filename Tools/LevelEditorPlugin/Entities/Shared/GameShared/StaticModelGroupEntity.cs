@@ -396,7 +396,15 @@ public class StaticModelGroupEntity : Entity, IEntityData<FrostySdk.Ebx.StaticMo
 
                     if (havokAsset != null)
                     {
-                        return App.AssetManager.GetResAs<Resources.HavokPhysicsData>(App.AssetManager.GetResEntry(havokAsset.Resource));
+                        long timing = LoadTiming.Enter();
+                        try
+                        {
+                            return App.AssetManager.GetResAs<Resources.HavokPhysicsData>(App.AssetManager.GetResEntry(havokAsset.Resource));
+                        }
+                        finally
+                        {
+                            LoadTiming.Exit(timing, "(read + parse Havok physics resource)");
+                        }
                     }
                 }
             }

@@ -112,6 +112,8 @@ public sealed class LoadReport
     private double meshTexturedMilliseconds;
     private string textureSummary;
     private readonly List<string> timings = new List<string>();
+    private readonly Dictionary<string, long[]> exclusiveTimes = new Dictionary<string, long[]>();
+    private string gpuMemorySummary;
     private int totalProxies;
 
     private LoadReport(string assetName, string assetType)
@@ -376,6 +378,30 @@ public sealed class LoadReport
             LevelEditorLog.Info("Load", $"{AssetName}: {line} (after the load report was written)");
     }
 
+    /// <summary>Adds exclusive time (Stopwatch ticks) for a category; see <see cref="LoadTiming"/>.</summary>
+    public static void AddExclusiveTime(string category, long ticks)
+    {
+        LoadReport r = Current;
+        if (r == null)
+            return;
+        lock (r.sync)
+        {
+            if (!r.exclusiveTimes.TryGetValue(category, out long[] entry))
+            {
+                entry = new long[2];
+                r.exclusiveTimes.Add(category, entry);
+            }
+            entry[0]++;
+            entry[1] += ticks;
+        }
+    }
+
+    public void SetGpuMemorySummary(string summary)
+    {
+        lock (sync)
+            gpuMemorySummary = summary;
+    }
+
     public static void MeshMaterialFailure(string stage, Exception ex)
     {
         LoadReport r = Current;
@@ -453,6 +479,23 @@ public sealed class LoadReport
             sb.AppendLine($"  after entities:   {(memoryAfterEntities?.ToString() ?? "n/a")}");
             sb.AppendLine($"  after render:     {(memoryAfterRender?.ToString() ?? "n/a")}");
             sb.AppendLine();
+
+            sb.AppendLine($"GPU memory (DXGI): {gpuMemorySummary ?? "n/a"}");
+            sb.AppendLine();
+
+            if (exclusiveTimes.Count > 0)
+            {
+                long totalTicks = 0;
+                foreach (long[] e in exclusiveTimes.Values)
+                    totalTicks += e[1];
+                sb.AppendLine($"Where load time went (exclusive time, nested work excluded; measured total {Seconds(totalTicks * 1000.0 / Stopwatch.Frequency)}, top 30)");
+                foreach (KeyValuePair<string, long[]> kv in exclusiveTimes.OrderByDescending(k => k.Value[1]).Take(30))
+                {
+                    double ms = kv.Value[1] * 1000.0 / Stopwatch.Frequency;
+                    sb.AppendLine($"  {Seconds(ms),10}  {kv.Value[0],8} x  {(ms * 1000.0 / Math.Max(1, kv.Value[0])),8:N1} us each  {kv.Key}");
+                }
+                sb.AppendLine();
+            }
 
             sb.AppendLine($"Entities: {totalEntities} total, {entityTypes.Count} types");
             AppendCounts(sb, entityTypes, 40);

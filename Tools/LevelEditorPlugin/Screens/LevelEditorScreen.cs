@@ -438,6 +438,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
             }
             proxies.AddRange(newProxies);
             report?.SetTextureSummary(TextureLibraryStats.Summarize(state.TextureLibrary));
+            report?.SetGpuMemorySummary(QueryGpuMemory(state.Device));
             report?.RenderFinished(newProxies);
         });
     }
@@ -531,6 +532,8 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
     public override void Render()
     {
+        frameStats.FrameStarted();
+
         if (renderTasks.Count > 0)
         {
             if (ShowTaskWindow)
@@ -688,6 +691,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
     /// </summary>
     public override List<MeshRenderInstance> CollectMeshInstances()
     {
+        long diagCollectStart = System.Diagnostics.Stopwatch.GetTimestamp();
         D3DUtils.BeginPerfEvent(Viewport.Context, "CollectMeshInstances_LevelEditor");
 
         LevelEditorCamera currentCamera = (LevelEditorCamera)camera;
@@ -740,8 +744,12 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         D3DUtils.EndPerfEvent(Viewport.Context);
 
+        frameStats.Collected(ElapsedMs(diagCollectStart), proxies.Count, instancesInView.Count);
         return instancesInView;
     }
+
+    private static double ElapsedMs(long start) =>
+        (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 
     /// <summary>
     /// In solid color mode, SetMeshResPath mesh is added as bare MeshLodRenderable; shared LevelShader is set here before draw for pipeline switching with view mode.
@@ -762,6 +770,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
                     return 2;
                 }
 
+                long diagSortStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 meshList.Sort((a, b) =>
                 {
                     int ca = GetRenderCategory(a);
@@ -773,7 +782,9 @@ public class LevelEditorScreen : DeferredRenderScreen2
                     float db = (b.RenderMesh as RenderProxy)?.CurrentDistanceToCamera ?? 0.0f;
                     return da.CompareTo(db);
                 });
+                frameStats.Sorted(ElapsedMs(diagSortStart));
 
+                long diagDrawStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 foreach (MeshRenderInstance mesh in meshList)
                 {
                     D3DUtils.BeginPerfEvent(Viewport.Context, mesh.RenderMesh.DebugName);
@@ -805,6 +816,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
                     }
                     D3DUtils.EndPerfEvent(Viewport.Context);
                 }
+                frameStats.Drawn(ElapsedMs(diagDrawStart), meshList.Count);
             }
             D3DUtils.EndPerfEvent(Viewport.Context);
         }
@@ -1147,6 +1159,28 @@ public class LevelEditorScreen : DeferredRenderScreen2
     }
 
     private static bool gpuInfoLogged;
+    private readonly FrameStats frameStats = new FrameStats("Level editor viewport");
+
+    private static string QueryGpuMemory(SharpDX.Direct3D11.Device device)
+    {
+        try
+        {
+            using (SharpDX.DXGI.Device dxgiDevice = device.QueryInterface<SharpDX.DXGI.Device>())
+            using (SharpDX.DXGI.Adapter adapter = dxgiDevice.Adapter)
+            using (SharpDX.DXGI.Adapter3 adapter3 = adapter.QueryInterface<SharpDX.DXGI.Adapter3>())
+            {
+                SharpDX.DXGI.QueryVideoMemoryInformation local = adapter3.QueryVideoMemoryInfo(0, SharpDX.DXGI.MemorySegmentGroup.Local);
+                SharpDX.DXGI.QueryVideoMemoryInformation nonLocal = adapter3.QueryVideoMemoryInfo(0, SharpDX.DXGI.MemorySegmentGroup.NonLocal);
+                const double mb = 1024.0 * 1024.0;
+                return $"this process uses {(long)local.CurrentUsage / mb:N0} MB of video memory (budget {(long)local.Budget / mb:N0} MB) " +
+                       $"and {(long)nonLocal.CurrentUsage / mb:N0} MB of shared system memory for GPU resources (budget {(long)nonLocal.Budget / mb:N0} MB)";
+            }
+        }
+        catch (Exception ex)
+        {
+            return $"unavailable ({ex.GetType().Name}: {ex.Message})";
+        }
+    }
 
     private void ProcessRenderTasks()
     {
