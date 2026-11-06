@@ -765,29 +765,49 @@ public class LevelEditorScreen : DeferredRenderScreen2
         else
             cullCandidates.AddRange(proxies);
 
+        // View width/height grow linearly with distance; GetWidthAtDepth does an acos and a tan on
+        // every call, so take the factor once per frame instead of twice per proxy.
+        CullView view = new CullView
+        {
+            Frustum = cameraFrustum,
+            CameraPosition = worldMatrix.TranslationVector,
+            WidthPerDepth = cameraFrustum.GetWidthAtDepth(1.0f),
+            HeightPerDepth = cameraFrustum.GetHeightAtDepth(1.0f),
+        };
+
+        // Model proxies (almost all of them) are tested in parallel; each worker only touches its
+        // own proxies (GetInstance sets the proxy's LOD index). Everything else stays on this thread.
+        int candidateCount = cullCandidates.Count;
+        bool parallel = candidateCount >= ParallelCullThreshold;
+        if (parallel)
+        {
+            System.Threading.Tasks.Parallel.ForEach(
+                System.Collections.Concurrent.Partitioner.Create(0, candidateCount, Math.Max(1024, candidateCount / (Environment.ProcessorCount * 4))),
+                () => new List<MeshRenderInstance>(),
+                (range, loopState, local) =>
+                {
+                    for (int i = range.Item1; i < range.Item2; i++)
+                    {
+                        if (cullCandidates[i] is ModelRenderProxy model && TestProxy(model, ref view, out float d) && !LevelEditorViewFilter.HidesMesh(model))
+                            local.Add(model.GetInstance(d));
+                    }
+                    return local;
+                },
+                local =>
+                {
+                    lock (instancesInView)
+                        instancesInView.AddRange(local);
+                });
+        }
+
         foreach (RenderProxy proxy in cullCandidates)
         {
-            float dist = (proxy.Transform.TranslationVector - worldMatrix.TranslationVector).Length();
-            float width = cameraFrustum.GetWidthAtDepth(dist);
-            float height = cameraFrustum.GetHeightAtDepth(dist);
+            if (parallel && proxy is ModelRenderProxy)
+                continue; // done above
 
-            // 使用缓存的包围球，避免每帧为每个 Proxy 重新 FromBox
-            BoundingSphere bSphere = proxy.BoundingSphere;
-            float wratio = (bSphere.Radius * 2) / width;
-            float hratio = (bSphere.Radius * 2) / height;
-            float screenSize = (wratio > hratio) ? wratio : hratio;
-
-            // 全局极小物体裁剪：不依赖具体 Proxy，只看屏幕占比
-            if (screenSize < MinScreenSizeCull)
-                continue;
-
-            if (proxy.ShouldRender(dist, screenSize))
+            if (TestProxy(proxy, ref view, out float dist))
             {
-                ContainmentType containmentType = cameraFrustum.Contains(proxy.BoundingBox);
-                if (containmentType == ContainmentType.Contains || containmentType == ContainmentType.Intersects)
                 {
-                    proxy.CurrentDistanceToCamera = dist;
-
                     if (proxy is SpriteRenderProxy spriteRenderProxy)
                     {
                         if (!LevelEditorViewFilter.HidesIcon(proxy))
@@ -811,6 +831,48 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         frameStats.Collected(ElapsedMs(diagCollectStart), proxies.Count, instancesInView.Count, cullCandidates.Count);
         return instancesInView;
+    }
+
+    private const int ParallelCullThreshold = 2048;
+
+    private struct CullView
+    {
+        public BoundingFrustum Frustum;
+        public Vector3 CameraPosition;
+        public float WidthPerDepth;
+        public float HeightPerDepth;
+    }
+
+    /// <summary>
+    /// Screen-size, per-proxy and frustum tests (same as before). Sets CurrentDistanceToCamera and
+    /// returns the distance when the proxy is visible. Safe to call for different proxies in parallel.
+    /// </summary>
+    private static bool TestProxy(RenderProxy proxy, ref CullView view, out float dist)
+    {
+        dist = (proxy.Transform.TranslationVector - view.CameraPosition).Length();
+        float width = view.WidthPerDepth * dist;
+        float height = view.HeightPerDepth * dist;
+
+        // cached bounding sphere
+        BoundingSphere bSphere = proxy.BoundingSphere;
+        float wratio = (bSphere.Radius * 2) / width;
+        float hratio = (bSphere.Radius * 2) / height;
+        float screenSize = (wratio > hratio) ? wratio : hratio;
+
+        // global minimum screen size
+        if (screenSize < MinScreenSizeCull)
+            return false;
+
+        if (!proxy.ShouldRender(dist, screenSize))
+            return false;
+
+        BoundingBox box = proxy.BoundingBox;
+        ContainmentType containmentType = view.Frustum.Contains(ref box);
+        if (containmentType != ContainmentType.Contains && containmentType != ContainmentType.Intersects)
+            return false;
+
+        proxy.CurrentDistanceToCamera = dist;
+        return true;
     }
 
     /// <summary>Builds the culling grid if needed, or rebuilds it once many proxies have moved.</summary>
@@ -853,6 +915,23 @@ public class LevelEditorScreen : DeferredRenderScreen2
                 // Same order as before (category, then distance), but each instance's key is computed
                 // once instead of in every comparison (the comparison did type checks each time).
                 long diagSortStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                int totalCount = meshList.Count;
+
+                // Repeated textured meshes go to the instanced batches first; only the rest is sorted
+                // and drawn one by one (terrain first, then near to far).
+                bool instancing = LevelEditorRenderingOptions.UseTexturedModelRendering && LevelEditorViewFilter.Instancing && InstancedMeshBatcher.Supported;
+                instanceBatcher.Begin();
+                if (instancing)
+                {
+                    int kept = 0;
+                    for (int i = 0; i < meshList.Count; i++)
+                    {
+                        if (!instanceBatcher.TryAdd(meshList[i]))
+                            meshList[kept++] = meshList[i];
+                    }
+                    meshList.RemoveRange(kept, meshList.Count - kept);
+                }
+
                 int count = meshList.Count;
                 if (sortKeys.Length < count)
                 {
@@ -885,14 +964,8 @@ public class LevelEditorScreen : DeferredRenderScreen2
                 frameStats.Sorted(ElapsedMs(diagSortStart));
 
                 long diagDrawStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                bool instancing = LevelEditorRenderingOptions.UseTexturedModelRendering && LevelEditorViewFilter.Instancing && InstancedMeshBatcher.Supported;
-                instanceBatcher.Begin();
                 foreach (MeshRenderInstance mesh in meshList)
                 {
-                    // repeated textured meshes are drawn together after this loop
-                    if (instancing && instanceBatcher.TryAdd(mesh))
-                        continue;
-
                     D3DUtils.BeginPerfEvent(Viewport.Context, mesh.RenderMesh.DebugName);
                     {
                         Matrix transform = mesh.Transform;
@@ -944,7 +1017,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
                     instanceBatcher.Flush(Viewport.Context);
                     D3DUtils.EndPerfEvent(Viewport.Context);
                 }
-                frameStats.Drawn(ElapsedMs(diagDrawStart), meshList.Count,
+                frameStats.Drawn(ElapsedMs(diagDrawStart), totalCount,
                     instancing ? instanceBatcher.LastInstanceCount : 0, instancing ? instanceBatcher.LastGroupCount : 0);
             }
             D3DUtils.EndPerfEvent(Viewport.Context);
