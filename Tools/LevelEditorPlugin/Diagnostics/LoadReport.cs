@@ -90,6 +90,7 @@ public sealed class LoadReport
     private readonly Dictionary<string, int> proxyTypes = new Dictionary<string, int>();
     private readonly List<SubWorldInfo> subWorlds = new List<SubWorldInfo>();
     private readonly List<string> missingAssets = new List<string>();
+    private readonly List<string> emissiveOnlyMeshes = new List<string>();
     private int missingAssetCount;
     private readonly List<string> nameLookups = new List<string>();
     private readonly Dictionary<string, int> meshMaterialFailures = new Dictionary<string, int>();
@@ -312,6 +313,13 @@ public sealed class LoadReport
             return;
         lock (r.sync)
             Increment(r.unboundDataTypes, dataType.Name);
+    }
+
+    /// <summary>A mesh resource whose materials only have emissive textures (hidden by default).</summary>
+    public void EmissiveOnlyMesh(string meshName)
+    {
+        lock (sync)
+            emissiveOnlyMeshes.Add(meshName);
     }
 
     public static void MissingAsset(string description)
@@ -638,6 +646,13 @@ public sealed class LoadReport
             sb.AppendLine("  examples of materials with textures but no Diffuse*:");
             foreach (string e in noDiffuseExamples)
                 sb.AppendLine("    " + e);
+            sb.AppendLine();
+
+            sb.AppendLine($"Emissive-only meshes (light cards; hidden unless View > Emissive-only meshes is on): {emissiveOnlyMeshes.Count}");
+            foreach (string m in emissiveOnlyMeshes.OrderBy(x => x).Take(60))
+                sb.AppendLine("  " + m);
+            if (emissiveOnlyMeshes.Count > 60)
+                sb.AppendLine($"  ... {emissiveOnlyMeshes.Count - 60} more");
             sb.AppendLine();
 
             sb.AppendLine($"Missing assets (referenced but not found): {missingAssetCount}");

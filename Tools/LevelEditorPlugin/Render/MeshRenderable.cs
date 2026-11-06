@@ -379,6 +379,12 @@ public class MeshRenderable : BaseRenderable
     public string DebugMeshName { get; set; }
     public MeshMaterialCollection DebugMaterials { get; set; }
 
+    /// <summary>
+    /// Every material only has emissive textures (light cards such as Ground_Lights_02). Such meshes
+    /// can be hidden from the viewport (LevelEditorViewFilter.EmissiveOnlyMeshes).
+    /// </summary>
+    public bool IsEmissiveOnly { get; set; }
+
     /// <summary>Diagnostics: time spent building the untextured (position/normal) LODs at load.</summary>
     public double UntexturedBuildMilliseconds { get; private set; }
     /// <summary>Diagnostics: time spent building the textured MeshSetPlugin mesh, including texture loads.</summary>

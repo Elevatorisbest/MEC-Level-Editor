@@ -34,6 +34,30 @@
                             MinWidth="120"
                             SelectionChanged="ComboBox_ViewMode_SelectionChanged" />
                     </DockPanel>
+                    <CheckBox
+                        x:Name="CheckBox_Bloom"
+                        Margin="3"
+                        Click="ViewFilter_Click"
+                        Content="Bloom"
+                        ToolTip="Glow around bright pixels (sun reflections on windows). Off by default." />
+                    <CheckBox
+                        x:Name="CheckBox_CollisionVolumes"
+                        Margin="3"
+                        Click="ViewFilter_Click"
+                        Content="Collision volumes"
+                        ToolTip="Yellow boxes of OBBCollisionEntity / PamOBBCollisionEntity. Hidden boxes cannot be clicked." />
+                    <CheckBox
+                        x:Name="CheckBox_EmissiveOnly"
+                        Margin="3"
+                        Click="ViewFilter_Click"
+                        Content="Emissive-only meshes (light cards)"
+                        ToolTip="Meshes whose materials only have emissive textures, e.g. Ground_Lights_02 over the streets. The load report lists them." />
+                    <CheckBox
+                        x:Name="CheckBox_HelperIcons"
+                        Margin="3"
+                        Click="ViewFilter_Click"
+                        Content="Helper icons"
+                        ToolTip="Icons for lights, locators, spawns and other non-mesh entities." />
                 </StackPanel>
             </GroupBox>
 

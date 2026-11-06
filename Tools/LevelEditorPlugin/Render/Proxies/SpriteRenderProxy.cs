@@ -51,6 +51,9 @@ public class SpriteRenderProxy : RenderProxy
     }
     private RenderType renderType;
 
+    /// <summary>Draws a box for a collision volume (OBBCollisionEntity / PamOBBCollisionEntity).</summary>
+    public bool IsCollisionVolume => renderType == RenderType.CubeMesh;
+
     /////////////////////////
 
     private static GeometryDeclarationDesc GeometryDecl = GeometryDeclarationDesc.Create(new GeometryDeclarationDesc.Element[]

@@ -65,6 +65,11 @@ public partial class MeshView : UserControl
         ComboBox_ViewMode.ItemsSource = ViewModeItems;
         ComboBox_ViewMode.SelectedIndex = Math.Min(LevelEditorRenderingOptions.ViewModeIndex, ViewModeItems.Length - 1);
 
+        CheckBox_Bloom.IsChecked = LevelEditorViewFilter.Bloom;
+        CheckBox_CollisionVolumes.IsChecked = LevelEditorViewFilter.CollisionVolumes;
+        CheckBox_EmissiveOnly.IsChecked = LevelEditorViewFilter.EmissiveOnlyMeshes;
+        CheckBox_HelperIcons.IsChecked = LevelEditorViewFilter.HelperIcons;
+
         // Initialize terrain edit mode UI
         if (CheckBox_TerrainEditMode != null)
             CheckBox_TerrainEditMode.IsChecked = BF1Core.Utils.TerrainEditState.IsTerrainEditModeEnabled;
@@ -73,6 +78,14 @@ public partial class MeshView : UserControl
     private void OnPendingCommitChanged()
     {
         Dispatcher.InvokeAsync(UpdateWriteHavokButtonState);
+    }
+
+    private void ViewFilter_Click(object sender, RoutedEventArgs e)
+    {
+        LevelEditorViewFilter.Bloom = CheckBox_Bloom.IsChecked == true;
+        LevelEditorViewFilter.CollisionVolumes = CheckBox_CollisionVolumes.IsChecked == true;
+        LevelEditorViewFilter.EmissiveOnlyMeshes = CheckBox_EmissiveOnly.IsChecked == true;
+        LevelEditorViewFilter.HelperIcons = CheckBox_HelperIcons.IsChecked == true;
     }
 
     private void ComboBox_ViewMode_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

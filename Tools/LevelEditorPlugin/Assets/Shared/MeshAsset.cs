@@ -50,11 +50,45 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
             MeshData = new Render.MeshRenderable(state, meshSet, lodGroup.Data, materials, resEntry);
             MeshData.DebugMeshName = App.AssetManager.GetEbxEntry(FileGuid)?.Name;
             MeshData.DebugMaterials = materials;
+            MeshData.IsEmissiveOnly = IsEmissiveOnly(materials);
+            if (MeshData.IsEmissiveOnly)
+                LoadReport.Current?.EmissiveOnlyMesh(MeshData.DebugMeshName ?? FileGuid.ToString());
             LoadReport.MeshLoaded(
                 (System.Diagnostics.Stopwatch.GetTimestamp() - diagStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
                 MeshData.UseTexturedRendering,
                 MeshData.UntexturedBuildMilliseconds,
                 MeshData.TexturedBuildMilliseconds);
+        }
+    }
+
+    /// <summary>
+    /// True when the mesh has materials and all their textures are emissive (Emissive, EmissiveMask,
+    /// ...), with at least one of them: light cards that only glow in game.
+    /// </summary>
+    private static bool IsEmissiveOnly(MeshMaterialCollection collection)
+    {
+        if (collection == null)
+            return false;
+        try
+        {
+            bool anyEmissive = false;
+            int materialCount = 0;
+            foreach (MeshMaterial material in collection)
+            {
+                materialCount++;
+                foreach (dynamic parameter in material.TextureParameters)
+                {
+                    string name = parameter.ParameterName;
+                    if (!name.StartsWith("Emissive", StringComparison.OrdinalIgnoreCase))
+                        return false;
+                    anyEmissive = true;
+                }
+            }
+            return materialCount > 0 && anyEmissive;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

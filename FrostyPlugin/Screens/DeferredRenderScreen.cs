@@ -2236,6 +2236,8 @@ namespace Frosty.Core.Screens
         public Vector4[] SHLightProbe { get; set; } = new Vector4[9];
         public DebugRenderMode RenderMode { get; set; }
         public bool GroundVisible { get; set; } = true;
+        /// <summary>Bloom post-process. When off, the bloom targets are cleared instead.</summary>
+        public bool BloomEnabled { get; set; } = true;
         public bool GridVisible { get; set; } = true;
         public float MinEV100 { get; set; } = 8.0f;
         public float MaxEV100 { get; set; } = 20.0f;
@@ -3656,7 +3658,10 @@ namespace Frosty.Core.Screens
                 PostProcessTAA();
                 PostProcessDownScaleScene();
                 PostProcessMeasureLuminance();
-                PostProcessBloom();
+                if (BloomEnabled)
+                    PostProcessBloom();
+                else
+                    ClearBloomTargets();
                 PostProcessColorLookupTable();
                 PostProcessSelectionOutline();
                 PostProcessEditorComposite();
@@ -4057,6 +4062,16 @@ namespace Frosty.Core.Screens
         /// <summary>
         /// 
         /// </summary>
+        private void ClearBloomTargets()
+        {
+            brightPassTexture.Clear(Viewport.Context, Color4.Black);
+            blurTexture.Clear(Viewport.Context, Color4.Black);
+            bloomSourceTexture.Clear(Viewport.Context, Color4.Black);
+            bloomTextures[0].Clear(Viewport.Context, Color4.Black);
+            bloomTextures[1].Clear(Viewport.Context, Color4.Black);
+            bloomTextures[2].Clear(Viewport.Context, Color4.Black);
+        }
+
         private void PostProcessBloom()
         {
             D3DUtils.BeginPerfEvent(Viewport.Context, "Bloom");

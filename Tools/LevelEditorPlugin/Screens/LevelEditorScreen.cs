@@ -489,6 +489,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
     public override void Update(double timestep)
     {
         RenderMode = LevelEditorRenderingOptions.GetDebugRenderMode();
+        BloomEnabled = LevelEditorViewFilter.Bloom;
 
         base.Update(timestep);
 
@@ -788,15 +789,16 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
                     if (proxy is SpriteRenderProxy spriteRenderProxy)
                     {
-                        sprites.Add(proxy.GetInstance(dist));
+                        if (!LevelEditorViewFilter.HidesIcon(proxy))
+                            sprites.Add(proxy.GetInstance(dist));
 
                         // Try to get model render instance
-                        if (spriteRenderProxy.GetMeshRenderInstance(out MeshRenderInstance instance))
+                        if (!LevelEditorViewFilter.HidesMesh(proxy) && spriteRenderProxy.GetMeshRenderInstance(out MeshRenderInstance instance))
                         {
                             instancesInView.Add(instance);
                         }
                     }
-                    else
+                    else if (!LevelEditorViewFilter.HidesMesh(proxy))
                     {
                         instancesInView.Add(proxy.GetInstance(dist));
                     }
@@ -942,6 +944,10 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         foreach (RenderProxy proxy in candidates)
         {
+            // not clickable when hidden in the View options (a sprite stays clickable while its icon or its box is shown)
+            if (LevelEditorViewFilter.HidesMesh(proxy) && (!(proxy is SpriteRenderProxy) || LevelEditorViewFilter.HidesIcon(proxy)))
+                continue;
+
             float dist = (proxy.Transform.TranslationVector - worldMatrix.TranslationVector).Length();
             float width = cameraFrustum.GetWidthAtDepth(dist);
             float height = cameraFrustum.GetHeightAtDepth(dist);
