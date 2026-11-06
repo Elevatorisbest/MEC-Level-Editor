@@ -1,5 +1,6 @@
 using Frosty.Core;
 using Frosty.Core.Attributes;
+using Frosty.Core.Screens;
 using Frosty.Core.Viewport;
 using FrostySdk;
 using LevelEditorPlugin.Diagnostics;
