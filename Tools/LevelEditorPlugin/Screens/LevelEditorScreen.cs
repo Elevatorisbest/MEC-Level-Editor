@@ -854,7 +854,18 @@ public class LevelEditorScreen : DeferredRenderScreen2
                     sortKeys[i] = category * 1.0e9 + distance;
                     sortItems[i] = inst;
                 }
-                Array.Sort(sortKeys, sortItems, 0, count);
+                try
+                {
+                    Array.Sort(sortKeys, sortItems, 0, count);
+                }
+                catch (InvalidOperationException ex) when (ex.InnerException is System.Threading.ThreadAbortException)
+                {
+                    // Frosty stops the render thread with Thread.Abort when the viewport closes. If
+                    // that lands inside Array.Sort, the sort wraps it in an InvalidOperationException,
+                    // which then crashed the editor as an unhandled exception. Returning here lets
+                    // the abort continue normally (it is re-raised at the end of this catch block).
+                    return;
+                }
                 meshList.Clear();
                 for (int i = 0; i < count; i++)
                     meshList.Add(sortItems[i]);

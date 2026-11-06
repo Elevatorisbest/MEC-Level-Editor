@@ -68,6 +68,9 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
                 List<string> names = new List<string>();
                 foreach (dynamic parameter in material.TextureParameters)
                     names.Add((string)parameter.ParameterName);
+                List<string> vectorNames = new List<string>();
+                foreach (dynamic parameter in material.VectorParameters)
+                    vectorNames.Add((string)parameter.ParameterName);
 
                 string shaderName = null;
                 if (material.Shader.Type == PointerRefType.External)
@@ -75,7 +78,7 @@ public class MeshAsset : Asset, IAssetData<FrostySdk.Ebx.MeshAsset>
                 else if (material.Shader.Type == PointerRefType.Internal)
                     shaderName = "(internal shader)";
 
-                LoadReport.MaterialSeen(meshName, shaderName, names);
+                LoadReport.MaterialSeen(meshName, shaderName, names, vectorNames);
             }
         }
         catch (Exception ex)

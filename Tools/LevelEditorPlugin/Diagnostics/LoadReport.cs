@@ -121,6 +121,8 @@ public sealed class LoadReport
     // material diagnostics (which texture parameter names MEC materials use)
     private int materialsSeen, materialsWithoutDiffuse, materialsWithoutTextures;
     private readonly Dictionary<string, int> textureParamNames = new Dictionary<string, int>();
+    private readonly Dictionary<string, int> vectorParamNames = new Dictionary<string, int>();
+    private readonly Dictionary<string, int> vectorParamNamesNoDiffuse = new Dictionary<string, int>();
     private readonly Dictionary<string, int[]> materialShaders = new Dictionary<string, int[]>();
     private readonly List<string> noDiffuseExamples = new List<string>();
     private string gpuMemorySummary;
@@ -446,7 +448,7 @@ public sealed class LoadReport
     /// Records one mesh material. "Diffuse" follows Frosty's fallback shader for Mirror's Edge
     /// Catalyst, which only uses a colour texture whose parameter name starts with "Diffuse".
     /// </summary>
-    public static void MaterialSeen(string meshName, string shaderName, List<string> textureParams)
+    public static void MaterialSeen(string meshName, string shaderName, List<string> textureParams, List<string> vectorParams)
     {
         LoadReport r = Current;
         if (r == null)
@@ -461,6 +463,8 @@ public sealed class LoadReport
 
             foreach (string name in textureParams)
                 Increment(r.textureParamNames, name ?? "(null)");
+            foreach (string name in vectorParams)
+                Increment(hasDiffuse ? r.vectorParamNames : r.vectorParamNamesNoDiffuse, name ?? "(null)");
 
             string shaderKey = shaderName ?? "(no shader)";
             if (!r.materialShaders.TryGetValue(shaderKey, out int[] counts))
@@ -612,6 +616,10 @@ public sealed class LoadReport
             sb.AppendLine($"  materials: {materialsSeen}, without a Diffuse* texture: {materialsWithoutDiffuse}, without any texture: {materialsWithoutTextures}");
             sb.AppendLine("  texture parameter names (count):");
             AppendCounts(sb, textureParamNames, 60);
+            sb.AppendLine("  vector parameter names in materials WITHOUT a Diffuse* texture (count):");
+            AppendCounts(sb, vectorParamNamesNoDiffuse, 40);
+            sb.AppendLine("  vector parameter names in materials with a Diffuse* texture (count):");
+            AppendCounts(sb, vectorParamNames, 25);
             sb.AppendLine("  shaders (materials, of which without Diffuse*), top 40:");
             foreach (KeyValuePair<string, int[]> kv in materialShaders.OrderByDescending(k => k.Value[0]).Take(40))
                 sb.AppendLine($"  {kv.Value[0],8} {kv.Value[1],8}  {kv.Key}");

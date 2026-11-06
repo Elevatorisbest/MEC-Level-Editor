@@ -519,13 +519,47 @@ namespace Frosty.Core.Viewport
         /// NOTE: Use of dynamic here as MeshRenderSection exists in the MeshSet plugin, however the fallback shader requires the MeshRenderSection
         ///       to populate the parameters correctly
         /// </summary>
+        // Mirror's Edge Catalyst texture parameter name matching for the fallback shader
+        // (higher score = better match; 0 = not this kind of texture).
+        private static int MecDiffuseScore(string name)
+        {
+            if (name.Equals("Diffuse")) return 5;
+            if (name.StartsWith("Diffuse")) return 4;                      // DiffuseWalkway, Diffuse_AO
+            if (name.StartsWith("Material01Diffuse")) return 3;
+            if (name.Contains("Diffuse")) return 2;                        // Material02Diffuse, XY_Diffuse
+            if (name.Equals("_D") || name.Equals("D")) return 1;
+            return 0;
+        }
+
+        private static int MecNormalScore(string name)
+        {
+            if (name.Equals("Normal")) return 5;
+            if (name.StartsWith("Normal") && !name.StartsWith("NormalDetail")) return 4;   // NormalWalkway
+            if (name.StartsWith("Material01NormalMap")) return 3;
+            if (name.Contains("NormalMap")) return 2;                      // Material02NormalMap, Tiles_NormalMap
+            if (name.StartsWith("NormalDetail")) return 1;                 // detail normal only if nothing else
+            return 0;
+        }
+
+        private static int MecRsmScore(string name)
+        {
+            if (name.Equals("RSM")) return 4;
+            if (name.Equals("_RSM")) return 3;
+            if (name.StartsWith("Material01RSM")) return 2;
+            if (name.StartsWith("RSM") || name.EndsWith("RSM")) return 1;  // RSMWalkway, Material02RSM
+            return 0;
+        }
+
         public void AssignFallbackParameters(RenderCreateState state, /*MeshRenderSection*/ dynamic section, MeshMaterial material)
         {
             float CustomParam1 = 0.0f;
             float CustomParam2 = 0.0f;
             float CustomParam3 = 0.0f;
             float SRGB = 0.0f;
-            Vector4 TintColorA = (ProfilesLibrary.DataVersion == (int)ProfileVersion.MirrorsEdgeCatalyst) ? Vector4.UnitW : Vector4.One;
+            // MEC: TintColorA.w is "has a diffuse texture" in the fallback shader. It used to start at 1,
+            // so materials without a colour texture sampled the default texture (a dev grid) instead of
+            // using white / DiffuseColor. It is set to 1 below when a diffuse texture is bound.
+            Vector4 TintColorA = (ProfilesLibrary.DataVersion == (int)ProfileVersion.MirrorsEdgeCatalyst) ? Vector4.Zero : Vector4.One;
             Vector4 TintColorB = (ProfilesLibrary.DataVersion == (int)ProfileVersion.MirrorsEdgeCatalyst) ? Vector4.UnitW : Vector4.One;
             Vector4 TintColorC = (ProfilesLibrary.DataVersion == (int)ProfileVersion.MirrorsEdgeCatalyst) ? Vector4.UnitW : Vector4.One;
             Vector4 TintColorD = (ProfilesLibrary.DataVersion == (int)ProfileVersion.MirrorsEdgeCatalyst) ? Vector4.UnitW : Vector4.One;
@@ -683,6 +717,9 @@ namespace Frosty.Core.Viewport
             ShaderResourceView MaskTexture = null;
             ShaderResourceView TintTexture = null;
 
+            // MEC: several parameters can look like the colour/normal/RSM texture; keep the best match
+            int mecDiffuseScore = 0, mecNormalScore = 0, mecRsmScore = 0;
+
             // texture params
             foreach (dynamic textureParam in material.TextureParameters)
             {
@@ -722,13 +759,39 @@ namespace Frosty.Core.Viewport
                 // MEC
                 else if (ProfilesLibrary.IsLoaded(ProfileVersion.MirrorsEdgeCatalyst))
                 {
-                    if (paramName.StartsWith("Diffuse")) { DiffuseTexture = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid); TintColorA.W = 1.0f; }
-                    else if (paramName.StartsWith("Normal")) { NormTexture = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid); }
-                    else if (paramName.Equals("RSM"))
+                    // Names seen in SP_MainCity materials: Diffuse, DiffuseWalkway, Material01..04Diffuse,
+                    // XY_Diffuse, Diffuse_AO, _D, D / Normal, NormalWalkway, Material01NormalMap,
+                    // NormalDetail / RSM, _RSM, Material01RSM, RSMWalkway.
+                    int diffuseScore = MecDiffuseScore(paramName);
+                    int normalScore = MecNormalScore(paramName);
+                    int rsmScore = MecRsmScore(paramName);
+
+                    if (diffuseScore > mecDiffuseScore)
                     {
-                        if (MaskTexture == null)
+                        ShaderResourceView srv = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid);
+                        if (srv != null)
                         {
-                            MaskTexture = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid);
+                            DiffuseTexture = srv;
+                            mecDiffuseScore = diffuseScore;
+                            TintColorA.W = 1.0f;
+                        }
+                    }
+                    else if (normalScore > mecNormalScore)
+                    {
+                        ShaderResourceView srv = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid);
+                        if (srv != null)
+                        {
+                            NormTexture = srv;
+                            mecNormalScore = normalScore;
+                        }
+                    }
+                    else if (rsmScore > mecRsmScore)
+                    {
+                        ShaderResourceView srv = state.TextureLibrary.LoadTextureAsset(value.External.FileGuid);
+                        if (srv != null)
+                        {
+                            MaskTexture = srv;
+                            mecRsmScore = rsmScore;
                             CustomParam1 = 1;
                         }
                     }
