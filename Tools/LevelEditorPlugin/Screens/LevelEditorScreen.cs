@@ -452,8 +452,39 @@ public class LevelEditorScreen : DeferredRenderScreen2
     private ScaleGizmo scaleGizmo;
     // a selected spatial entity (or terrain vertex) shows the active gizmo
     private bool showGizmo;
-    // the selected entity's world transform when the current gizmo drag started
-    private Matrix dragStartWorld;
+
+    // Multi-select: entities added with Ctrl/Shift-click besides the primary selection (the one the
+    // properties panels show), and their proxies.
+    private readonly List<Entity> extraSelected = new List<Entity>();
+    private readonly List<RenderProxy> extraProxies = new List<RenderProxy>();
+
+    private sealed class DragTarget
+    {
+        public ISpatialEntity Entity;
+        public Matrix StartWorld;
+        public Matrix ParentWorld;
+    }
+    private readonly List<DragTarget> dragTargets = new List<DragTarget>();
+    private Vector3 dragPivot;
+    private Quaternion dragGizmoRotation;
+    private CompositeTransformUndoUnit dragUndo;
+
+    /// <summary>All selected spatial entities: the primary selection first, then Ctrl/Shift-clicked ones.</summary>
+    private List<ISpatialEntity> SelectedSpatialEntities()
+    {
+        List<ISpatialEntity> result = new List<ISpatialEntity>();
+        if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner is ISpatialEntity primary)
+            result.Add(primary);
+        Entity[] extras;
+        lock (extraSelected)
+            extras = extraSelected.ToArray();
+        foreach (Entity entity in extras)
+        {
+            if (entity is ISpatialEntity spatial && !result.Contains(spatial))
+                result.Add(spatial);
+        }
+        return result;
+    }
 
     private static GizmoMode gizmoMode = GizmoMode.Move;
     /// <summary>Raised when the gizmo mode changes (side panel buttons follow it).</summary>
@@ -580,10 +611,13 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         if (!active.IsDragging && !TerrainEditState.IsTerrainEditModeEnabled)
         {
-            if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.RequiresTransformUpdate)
+            bool changed = (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.RequiresTransformUpdate)
+                || extraProxies.Any(p => p.OwnerEntity.RequiresTransformUpdate);
+            if (changed)
             {
-                if (selectedProxies[0].OwnerEntity.Owner is ISpatialEntity spatialEntity)
-                    PlaceGizmos(spatialEntity);
+                List<ISpatialEntity> selection = SelectedSpatialEntities();
+                if (selection.Count > 0)
+                    PlaceGizmos(selection);
             }
         }
 
@@ -764,11 +798,16 @@ public class LevelEditorScreen : DeferredRenderScreen2
     public void ClearSelection()
     {
         showGizmo = false;
+        lock (extraSelected)
+            extraSelected.Clear();
         renderTasks.Enqueue((state) =>
         {
             foreach (RenderProxy proxy in selectedProxies)
                 proxy.SetSelected(state, false);
             selectedProxies.Clear();
+            foreach (RenderProxy proxy in extraProxies)
+                proxy.SetSelected(state, false);
+            extraProxies.Clear();
         });
 
         MainWindow.UpdateSelectedEntity(null, this);
@@ -785,7 +824,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
         // Show translate controller (including StaticModelGroup children, modification now supported)
         if (entity is ISpatialEntity spatialEntity)
         {
-            PlaceGizmos(spatialEntity);
+            PlaceGizmos(new List<ISpatialEntity> { spatialEntity });
             showGizmo = true;
         }
 
@@ -1190,50 +1229,146 @@ public class LevelEditorScreen : DeferredRenderScreen2
     /// parent (prefab, sub-world, static model group), so convert through the parent's world matrix.
     /// Before this, objects inside an offset or rotated parent jumped when moved.
     /// </summary>
-    private void MoveEntityToGizmo(ISpatialEntity spatialEntity, bool suppressUpdate)
+    /// <summary>
+    /// Records every selected entity's transforms at the start of a gizmo drag and starts one
+    /// combined undo step for all of them.
+    /// </summary>
+    private void BeginGizmoDrag()
     {
-        Matrix local = spatialEntity.GetLocalTransform();
-        Matrix world = spatialEntity.GetTransform();
+        dragTargets.Clear();
+        dragPivot = ActiveGizmo.Transform.TranslationVector;
+        dragGizmoRotation = scaleGizmo.Orientation;
+        dragUndo = new CompositeTransformUndoUnit();
 
-        // world = local * parentWorld  =>  parentWorld = inverse(local) * world
-        Matrix parentWorld = Matrix.Identity;
-        if (Math.Abs(local.Determinant()) > 1e-8f)
-            parentWorld = Matrix.Invert(local) * world;
+        foreach (ISpatialEntity entity in SelectedSpatialEntities())
+        {
+            Matrix local = entity.GetLocalTransform();
+            Matrix world = entity.GetTransform();
+            // world = local * parentWorld  =>  parentWorld = inverse(local) * world
+            Matrix parentWorld = Matrix.Identity;
+            if (Math.Abs(local.Determinant()) > 1e-8f)
+                parentWorld = Matrix.Invert(local) * world;
 
-        dragStartWorld.Decompose(out Vector3 startScale, out Quaternion startRotation, out Vector3 startTranslation);
-        Matrix newWorld;
+            dragTargets.Add(new DragTarget { Entity = entity, StartWorld = world, ParentWorld = parentWorld });
+            dragUndo.Add(entity);
+        }
+
+        // the per-entity SetTransform calls see a pending unit and do not start their own
+        Frosty.Core.Managers.UndoManager undo = Frosty.Core.Managers.UndoManager.Instance;
+        if (undo != null)
+            undo.PendingUndoUnit = dragUndo;
+    }
+
+    /// <summary>
+    /// Applies the active gizmo's change to every selected entity, about the selection centre.
+    /// The gizmo works in world space; SetTransform takes the parent-relative transform, so each
+    /// result goes through the entity's parent world matrix. On release the combined undo step is
+    /// committed.
+    /// </summary>
+    private void ApplyGizmoToSelection(bool finished)
+    {
+        if (dragTargets.Count == 0)
+            return;
+
+        Matrix delta;
         if (ActiveGizmo == rotateGizmo)
         {
-            // rotate about the object's origin around a world axis
-            // row vectors: object rotation first, then the world-axis rotation of the drag
-            newWorld = Matrix.Scaling(startScale) * Matrix.RotationQuaternion(startRotation) * Matrix.RotationQuaternion(rotateGizmo.DeltaRotation) * Matrix.Translation(startTranslation);
+            delta = Matrix.Translation(-dragPivot) * Matrix.RotationQuaternion(rotateGizmo.DeltaRotation) * Matrix.Translation(dragPivot);
         }
         else if (ActiveGizmo == scaleGizmo)
         {
-            // scale along the object's own axes
-            newWorld = Matrix.Scaling(startScale.X * scaleGizmo.DeltaScale.X, startScale.Y * scaleGizmo.DeltaScale.Y, startScale.Z * scaleGizmo.DeltaScale.Z) * Matrix.RotationQuaternion(startRotation) * Matrix.Translation(startTranslation);
+            // scale along the gizmo's axes (the primary object's axes) about the centre
+            Matrix toGizmo = Matrix.RotationQuaternion(dragGizmoRotation);
+            Vector3 d = scaleGizmo.DeltaScale;
+            delta = Matrix.Translation(-dragPivot) * Matrix.Invert(toGizmo) * Matrix.Scaling(d.X, d.Y, d.Z) * toGizmo * Matrix.Translation(dragPivot);
         }
         else
         {
-            world.Decompose(out Vector3 scale, out Quaternion rotation, out Vector3 _);
-            newWorld = Matrix.Scaling(scale) * Matrix.RotationQuaternion(rotation) * Matrix.Translation(translateGizmo.Transform.TranslationVector);
+            delta = Matrix.Translation(translateGizmo.Transform.TranslationVector - dragPivot);
         }
 
-        Matrix newLocal = newWorld;
-        if (Math.Abs(parentWorld.Determinant()) > 1e-8f)
-            newLocal = newWorld * Matrix.Invert(parentWorld);
+        foreach (DragTarget target in dragTargets)
+        {
+            Matrix newWorld = target.StartWorld * delta;
+            Matrix newLocal = newWorld;
+            if (Math.Abs(target.ParentWorld.Determinant()) > 1e-8f)
+                newLocal = newWorld * Matrix.Invert(target.ParentWorld);
 
-        spatialEntity.SetTransform(newLocal, suppressUpdate);
+            target.Entity.SetTransform(newLocal, suppressUpdate: true);
+            target.Entity.RequiresTransformUpdate = true;
+        }
+
+        if (finished)
+        {
+            Frosty.Core.Managers.UndoManager undo = Frosty.Core.Managers.UndoManager.Instance;
+            if (undo != null && dragUndo != null && dragUndo.Count > 0)
+            {
+                if (undo.PendingUndoUnit == dragUndo)
+                    undo.PendingUndoUnit = null;
+                undo.CommitUndo(dragUndo);
+            }
+            dragUndo = null;
+            dragTargets.Clear();
+        }
     }
 
-    /// <summary>Puts all gizmos at the entity's origin; the scale gizmo also takes its rotation.</summary>
-    private void PlaceGizmos(ISpatialEntity spatialEntity)
+    /// <summary>
+    /// Puts all gizmos at the centre of the given entities' origins; the scale gizmo takes the first
+    /// (primary) entity's rotation.
+    /// </summary>
+    private void PlaceGizmos(List<ISpatialEntity> entities)
     {
-        Matrix world = spatialEntity.GetTransform();
-        world.Decompose(out Vector3 _, out Quaternion rotation, out Vector3 translation);
+        Vector3 sum = Vector3.Zero;
+        Quaternion rotation = Quaternion.Identity;
+        for (int i = 0; i < entities.Count; i++)
+        {
+            entities[i].GetTransform().Decompose(out Vector3 _, out Quaternion r, out Vector3 t);
+            sum += t;
+            if (i == 0)
+                rotation = r;
+        }
+        Vector3 center = sum / Math.Max(1, entities.Count);
         foreach (Gizmo gizmo in AllGizmos)
-            gizmo.Transform = Matrix.Translation(translation);
+            gizmo.Transform = Matrix.Translation(center);
         scaleGizmo.Orientation = rotation;
+    }
+
+    /// <summary>Ctrl/Shift-click: adds the entity to the selection or removes it again.</summary>
+    private void ToggleExtraSelection(Entity entity)
+    {
+        if (entity == null || (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner == entity))
+            return;
+
+        List<RenderProxy> found = proxies.Where(rp => rp.OwnerEntity.Owner == entity).ToList();
+        bool remove;
+        lock (extraSelected)
+        {
+            remove = extraSelected.Contains(entity);
+            if (remove)
+                extraSelected.Remove(entity);
+            else
+                extraSelected.Add(entity);
+        }
+
+        renderTasks.Enqueue((state) =>
+        {
+            foreach (RenderProxy proxy in found)
+            {
+                proxy.SetSelected(state, !remove);
+                if (remove)
+                    extraProxies.Remove(proxy);
+                else if (!extraProxies.Contains(proxy))
+                    extraProxies.Add(proxy);
+            }
+        });
+
+        List<ISpatialEntity> selection = SelectedSpatialEntities();
+        if (selection.Count > 0)
+        {
+            PlaceGizmos(selection);
+            showGizmo = true;
+        }
+        LevelEditorLog.Info("Selection", $"{(remove ? "Removed" : "Added")} {entity.DisplayName}; {selection.Count} selected");
     }
 
     public override void KeyDown(int key)
@@ -1260,12 +1395,10 @@ public class LevelEditorScreen : DeferredRenderScreen2
         {
             if (ActiveGizmo.MouseDown(x, y, GetHitTestRay(x, y), button))
             {
-                if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner is ISpatialEntity dragged)
-                    dragStartWorld = dragged.GetTransform();
-
-                // a drag starts a fresh undo unit (drop anything left pending by other code)
+                // drop anything left pending by other code, then one undo step for the whole drag
                 if (Frosty.Core.Managers.UndoManager.Instance != null)
                     Frosty.Core.Managers.UndoManager.Instance.PendingUndoUnit = null;
+                BeginGizmoDrag();
                 return;
             }
         }
@@ -1298,14 +1431,8 @@ public class LevelEditorScreen : DeferredRenderScreen2
         if (!TerrainEditState.IsTerrainEditModeEnabled &&
             ActiveGizmo.MouseUp(x, y, GetHitTestRay(x, y), button))
         {
-            // Support StaticModelGroup child modification
-            if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner is ISpatialEntity spatialEntity)
-            {
-                MoveEntityToGizmo(spatialEntity, suppressUpdate: false);
-
-                foreach (RenderProxy proxy in selectedProxies)
-                    proxy.OwnerEntity.RequiresTransformUpdate = true;
-            }
+            // all selected entities, including StaticModelGroup children; commits one undo step
+            ApplyGizmoToSelection(finished: true);
 
             MainWindow.UpdateEntityTransform();
 
@@ -1370,7 +1497,11 @@ public class LevelEditorScreen : DeferredRenderScreen2
                         ? proxy.OwnerEntity.Owner
                         : null;
 
-                SelectedEntityChanged?.Invoke(this, new SelectedEntityChangedEventArgs(entityToSelect));
+                bool addToSelection = (System.Windows.Input.Keyboard.Modifiers & (System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift)) != 0;
+                if (addToSelection && entityToSelect != null && selectedProxies.Count > 0 && !TerrainEditState.IsTerrainEditModeEnabled)
+                    ToggleExtraSelection(entityToSelect);
+                else
+                    SelectedEntityChanged?.Invoke(this, new SelectedEntityChangedEventArgs(entityToSelect));
             }
         }
 
@@ -1438,13 +1569,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
         }
         else
         {
-            if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner is ISpatialEntity spatialEntity)
-            {
-                MoveEntityToGizmo(spatialEntity, suppressUpdate: true);
-
-                foreach (RenderProxy proxy in selectedProxies)
-                    proxy.OwnerEntity.RequiresTransformUpdate = true;
-            }
+            ApplyGizmoToSelection(finished: false);
 
             MainWindow.UpdateEntityTransform();
         }

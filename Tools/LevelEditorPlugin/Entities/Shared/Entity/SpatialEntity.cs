@@ -236,3 +236,43 @@ public class SpatialEntity : Entity, IEntityData<FrostySdk.Ebx.SpatialEntityData
         base.Destroy();
     }
 }
+
+/// <summary>
+/// One undo step for a gizmo drag over several objects: holds each object's own move undo unit
+/// (entity or static-model-group element) and undoes/redoes them together.
+/// </summary>
+public class CompositeTransformUndoUnit : IRedoableUndoUnit
+{
+    private readonly List<IRedoableUndoUnit> children = new List<IRedoableUndoUnit>();
+
+    public string Text => children.Count == 1 ? "Transform Entity" : $"Transform {children.Count} Entities";
+    public int Count => children.Count;
+
+    /// <summary>Adds the undo unit for an entity, recording its current local transform as the original.</summary>
+    public void Add(ISpatialEntity spatialEntity)
+    {
+        Matrix original = spatialEntity.GetLocalTransform();
+        if (spatialEntity is StaticModelGroupElementEntity element)
+            children.Add(new StaticModelGroupElementMoveEntityUndoUnit(element, original));
+        else if (spatialEntity is Entity entity)
+            children.Add(new MoveEntityUndoUnit(entity, original));
+    }
+
+    public void Do()
+    {
+        foreach (IRedoableUndoUnit child in children)
+            child.Do();
+    }
+
+    public void Undo()
+    {
+        for (int i = children.Count - 1; i >= 0; i--)
+            children[i].Undo();
+    }
+
+    public void Redo()
+    {
+        foreach (IRedoableUndoUnit child in children)
+            child.Redo();
+    }
+}
