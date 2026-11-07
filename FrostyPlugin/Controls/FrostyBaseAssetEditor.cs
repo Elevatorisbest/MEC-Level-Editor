@@ -57,7 +57,17 @@ namespace Frosty.Core.Controls
         
         public override void Closed()
         {
-            UndoManager.ClearCurrent();
+            // only clear the current undo history if it is this editor's (closing another tab used
+            // to leave the visible editor without one)
+            if (UndoManager.Instance == undoManager)
+                UndoManager.ClearCurrent();
+        }
+
+        /// <summary>Makes this editor's undo history the current one.</summary>
+        protected void MakeUndoCurrent()
+        {
+            if (undoManager != null && UndoManager.Instance != undoManager)
+                UndoManager.SetCurrent(undoManager);
         }
 
         protected virtual void Initialize()

@@ -157,19 +157,25 @@
                                 Uid="X"
                                 d:Text="1.23"
                                 MouseWheel="TextBox_Transform_MouseWheel"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                             <TextBox
                                 x:Name="TextBox_TransY"
                                 Uid="Y"
                                 MouseWheel="TextBox_Transform_MouseWheel"
                                 SelectionBrush="#208020"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                             <TextBox
                                 x:Name="TextBox_TransZ"
                                 Uid="Z"
                                 MouseWheel="TextBox_Transform_MouseWheel"
                                 SelectionBrush="#005080"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                         </UniformGrid>
                     </DockPanel>
                     <!--  Rotation  -->
@@ -184,19 +190,25 @@
                                 x:Name="TextBox_RotateX"
                                 Uid="X"
                                 MouseWheel="TextBox_Transform_MouseWheel"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                             <TextBox
                                 x:Name="TextBox_RotateY"
                                 Uid="Y"
                                 MouseWheel="TextBox_Transform_MouseWheel"
                                 SelectionBrush="#208020"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                             <TextBox
                                 x:Name="TextBox_RotateZ"
                                 Uid="Z"
                                 MouseWheel="TextBox_Transform_MouseWheel"
                                 SelectionBrush="#005080"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                         </UniformGrid>
                     </DockPanel>
                     <!--  Scale  -->
@@ -211,19 +223,25 @@
                                 x:Name="TextBox_ScaleX"
                                 Uid="X"
                                 MouseWheel="TextBox_Transform_MouseWheel"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                             <TextBox
                                 x:Name="TextBox_ScaleY"
                                 Uid="Y"
                                 MouseWheel="TextBox_Transform_MouseWheel"
                                 SelectionBrush="#208020"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                             <TextBox
                                 x:Name="TextBox_ScaleZ"
                                 Uid="Z"
                                 MouseWheel="TextBox_Transform_MouseWheel"
                                 SelectionBrush="#005080"
-                                TextChanged="TextBox_Transform_TextChanged" />
+                                TextChanged="TextBox_Transform_TextChanged"
+                                KeyDown="TextBox_Transform_KeyDown"
+                                LostKeyboardFocus="TextBox_Transform_Commit" />
                         </UniformGrid>
                     </DockPanel>
 

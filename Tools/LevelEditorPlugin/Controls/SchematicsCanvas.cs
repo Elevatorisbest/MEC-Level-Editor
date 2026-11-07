@@ -1668,10 +1668,15 @@ public class SchematicsCanvas : GridCanvas
 
         undoContainer.Add(new GenericUndoUnit("", o => InvalidateVisual(), o => ClearSelection()));
 
-        UndoManager.Instance.CommitUndo(undoContainer);
         if (layoutData.HasValue)
         {
-            UndoManager.Instance.Clear();
+            // loading a saved layout is not an edit: apply it without touching the undo history
+            // (this used to Clear() the whole history, including level editor moves)
+            undoContainer.Do();
+        }
+        else
+        {
+            UndoManager.Instance.CommitUndo(undoContainer);
         }
     }
 

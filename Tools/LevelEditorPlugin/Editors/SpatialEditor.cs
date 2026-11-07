@@ -81,10 +81,16 @@ public class SpatialEditor : ToolbarAssetEditor, IEditorProvider
         InputBindings.Add(new System.Windows.Input.KeyBinding(undo, System.Windows.Input.Key.Z, System.Windows.Input.ModifierKeys.Control));
         InputBindings.Add(new System.Windows.Input.KeyBinding(redo, System.Windows.Input.Key.Y, System.Windows.Input.ModifierKeys.Control));
         InputBindings.Add(new System.Windows.Input.KeyBinding(redo, System.Windows.Input.Key.Z, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift));
+
+        // edits made in this editor go into this editor's history even if another asset tab was
+        // opened or closed in between
+        PreviewMouseDown += (s, e) => MakeUndoCurrent();
+        PreviewKeyDown += (s, e) => MakeUndoCurrent();
     }
 
     private void UndoRedo(bool redo)
     {
+        MakeUndoCurrent();
         try
         {
             if (redo)

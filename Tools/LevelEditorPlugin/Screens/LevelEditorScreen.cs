@@ -1149,6 +1149,9 @@ public class LevelEditorScreen : DeferredRenderScreen2
         {
             if (translateGizmo.MouseDown(x, y, GetHitTestRay(x, y), button))
             {
+                // a drag starts a fresh undo unit (drop anything left pending by other code)
+                if (Frosty.Core.Managers.UndoManager.Instance != null)
+                    Frosty.Core.Managers.UndoManager.Instance.PendingUndoUnit = null;
                 return;
             }
         }

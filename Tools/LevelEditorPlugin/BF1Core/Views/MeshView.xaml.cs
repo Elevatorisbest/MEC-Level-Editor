@@ -162,6 +162,23 @@ public partial class MeshView : UserControl
     /// </summary>
     public void UpdateUI()
     {
+        updatingUi = true;
+        try
+        {
+            UpdateUIFields();
+        }
+        finally
+        {
+            updatingUi = false;
+            RememberShownTransform();
+        }
+
+        // Update terrain edit area UI (e.g. current selected vertex height)
+        UpdateTerrainVertexUI();
+    }
+
+    private void UpdateUIFields()
+    {
         if (Entity == null)
         {
             TextBlock_EntityName.Text = "Null";
@@ -207,9 +224,6 @@ public partial class MeshView : UserControl
 
             UpdateWriteHavokButtonState();
         }
-
-        // Update terrain edit area UI (e.g. current selected vertex height)
-        UpdateTerrainVertexUI();
     }
 
     /// <summary>
@@ -248,62 +262,120 @@ public partial class MeshView : UserControl
         }
     }
 
-    /// <summary>
-    /// Modify model coordinates in real-time
-    /// </summary>
+    // Transform fields. They used to write the transform on every TextChanged, including while
+    // UpdateUI filled them in one by one after a selection change: selecting an object briefly gave
+    // it a mix of its own and the previous object's values, re-rounded its rotation, marked its
+    // layer as modified, and left a pending undo unit that a later drag committed. Now a refresh
+    // never writes, and user edits are applied on Enter / leaving the box as one undo step, using
+    // only the fields that were actually changed.
+    private bool updatingUi;
+    private readonly Dictionary<TextBox, string> shownTransformText = new Dictionary<TextBox, string>();
+
+    private TextBox[] TransformBoxes => new[]
+    {
+        TextBox_TransX, TextBox_TransY, TextBox_TransZ,
+        TextBox_RotateX, TextBox_RotateY, TextBox_RotateZ,
+        TextBox_ScaleX, TextBox_ScaleY, TextBox_ScaleZ,
+    };
+
+    private void RememberShownTransform()
+    {
+        shownTransformText.Clear();
+        foreach (TextBox box in TransformBoxes)
+            shownTransformText[box] = box.Text;
+    }
+
+    private bool FieldChanged(TextBox box)
+    {
+        return !shownTransformText.TryGetValue(box, out string shown) || shown != box.Text;
+    }
+
+    private float FieldValue(TextBox box, float current)
+    {
+        return FieldChanged(box) && float.TryParse(box.Text, out float value) ? value : current;
+    }
+
     private void TextBox_Transform_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (UndoManager.Instance == null) return;
+        // applied on Enter or when the box loses focus (TextBox_Transform_Commit)
+    }
 
-        if (Entity == null)
+    private void TextBox_Transform_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            ApplyTransformFields();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            UpdateUI(); // discard the typed value
+            e.Handled = true;
+        }
+    }
+
+    private void TextBox_Transform_Commit(object sender, RoutedEventArgs e)
+    {
+        ApplyTransformFields();
+    }
+
+    /// <summary>Applies the changed transform fields to the selected entity as one undoable edit.</summary>
+    private void ApplyTransformFields()
+    {
+        if (updatingUi || UndoManager.Instance == null || !(Entity is ISpatialEntity spatialEntity))
+            return;
+
+        bool anyChanged = false;
+        foreach (TextBox box in TransformBoxes)
+            anyChanged |= FieldChanged(box);
+        if (!anyChanged)
             return;
 
         try
         {
-            if (Entity is ISpatialEntity spatialEntity)
+            Matrix local = spatialEntity.GetLocalTransform();
+            local.Decompose(out Vector3 scale, out Quaternion rotation, out Vector3 translation);
+
+            translation = new Vector3(FieldValue(TextBox_TransX, translation.X), FieldValue(TextBox_TransY, translation.Y), FieldValue(TextBox_TransZ, translation.Z));
+
+            if (FieldChanged(TextBox_RotateX) || FieldChanged(TextBox_RotateY) || FieldChanged(TextBox_RotateZ))
             {
-                var matrix = spatialEntity.GetLocalTransform();
-                _ = matrix.Decompose(out Vector3 scale, out _, out Vector3 translation);
-                var euler = SharpDXUtils.ExtractEulerAngles(matrix);
-
-                if (float.TryParse(TextBox_TransX.Text, out float value)) translation.X = value;
-                if (float.TryParse(TextBox_TransY.Text, out value)) translation.Y = value;
-                if (float.TryParse(TextBox_TransZ.Text, out value)) translation.Z = value;
-
-                if (float.TryParse(TextBox_RotateX.Text, out value)) euler.X = value;
-                if (float.TryParse(TextBox_RotateY.Text, out value)) euler.Y = value;
-                if (float.TryParse(TextBox_RotateZ.Text, out value)) euler.Z = value;
-
-                if (float.TryParse(TextBox_ScaleX.Text, out value)) scale.X = value;
-                if (float.TryParse(TextBox_ScaleY.Text, out value)) scale.Y = value;
-                if (float.TryParse(TextBox_ScaleZ.Text, out value)) scale.Z = value;
-
-                // Normalize Euler angles
-                euler.X = CoreUtil.NormalizeAngle(euler.X);
-                euler.Y = CoreUtil.NormalizeAngle(euler.Y);
-                euler.Z = CoreUtil.NormalizeAngle(euler.Z);
-
-                TextBox_RotateX.Text = euler.X.ToString("0.00000");
-                TextBox_RotateY.Text = euler.Y.ToString("0.00000");
-                TextBox_RotateZ.Text = euler.Z.ToString("0.00000");
-
-                var degToRad = (float)(Math.PI / 180.0);
-                var quaternion = SharpDXUtils.CreateFromEulerAngles(euler.X * degToRad, euler.Y * degToRad, euler.Z * degToRad);
-
-                var newMatrix = Matrix.Scaling(scale.X, scale.Y, scale.Z) *
-                    Matrix.RotationQuaternion(quaternion) *
-                    Matrix.Translation(translation);
-
-                spatialEntity.SetTransform(newMatrix, true);
-                spatialEntity.RequiresTransformUpdate = true;
-
-                UpdateWriteHavokButtonState();
+                Vector3 euler = SharpDXUtils.ExtractEulerAngles(local);
+                euler = new Vector3(
+                    CoreUtil.NormalizeAngle(FieldValue(TextBox_RotateX, euler.X)),
+                    CoreUtil.NormalizeAngle(FieldValue(TextBox_RotateY, euler.Y)),
+                    CoreUtil.NormalizeAngle(FieldValue(TextBox_RotateZ, euler.Z)));
+                float degToRad = (float)(Math.PI / 180.0);
+                rotation = SharpDXUtils.CreateFromEulerAngles(euler.X * degToRad, euler.Y * degToRad, euler.Z * degToRad);
             }
+
+            scale = new Vector3(FieldValue(TextBox_ScaleX, scale.X), FieldValue(TextBox_ScaleY, scale.Y), FieldValue(TextBox_ScaleZ, scale.Z));
+
+            ApplyTransformAsOneEdit(spatialEntity, Matrix.Scaling(scale) * Matrix.RotationQuaternion(rotation) * Matrix.Translation(translation));
         }
         catch (Exception ex)
         {
             App.Logger.LogError($"Exception while modifying selected model coordinates: {ex.Message}");
         }
+
+        UpdateUI();
+    }
+
+    /// <summary>
+    /// Sets the entity's local transform as a single undo step (start an undo unit with the current
+    /// transform, then commit it), discarding any stale pending unit first.
+    /// </summary>
+    private void ApplyTransformAsOneEdit(ISpatialEntity spatialEntity, Matrix newLocal)
+    {
+        UndoManager undo = UndoManager.Instance;
+        if (undo == null)
+            return;
+
+        undo.PendingUndoUnit = null;
+        spatialEntity.SetTransform(newLocal, suppressUpdate: true);
+        spatialEntity.SetTransform(newLocal, suppressUpdate: false);
+        spatialEntity.RequiresTransformUpdate = true;
+        UpdateWriteHavokButtonState();
     }
 
     /// <summary>
@@ -344,6 +416,7 @@ public partial class MeshView : UserControl
                     TextBox_ScaleZ.Text = value.ToString("0.00000");
                 }
 
+                ApplyTransformFields();
                 e.Handled = true;
             }
         }
@@ -410,8 +483,8 @@ public partial class MeshView : UserControl
             var newMatrix = Matrix.Scaling(scale) *
                 Matrix.RotationQuaternion(quaternion) *
                 Matrix.Translation(cameraPos);
-            spatialEntity.SetTransform(newMatrix, true);
-            spatialEntity.RequiresTransformUpdate = true;
+            ApplyTransformAsOneEdit(spatialEntity, newMatrix);
+            UpdateUI();
         }
 
         Button_SnapToCam.IsEnabled = true;
@@ -427,6 +500,7 @@ public partial class MeshView : UserControl
         TextBox_RotateX.Text = "0.0";
         TextBox_RotateY.Text = "0.0";
         TextBox_RotateZ.Text = "0.0";
+        ApplyTransformFields();
     }
 
     /// <summary>
@@ -437,6 +511,7 @@ public partial class MeshView : UserControl
         TextBox_ScaleX.Text = "1.0";
         TextBox_ScaleY.Text = "1.0";
         TextBox_ScaleZ.Text = "1.0";
+        ApplyTransformFields();
     }
 
     /// <summary>
