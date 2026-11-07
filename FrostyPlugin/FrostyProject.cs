@@ -117,6 +117,13 @@ namespace Frosty.Core
         /// </summary>
         public static event Action BeforeWrite;
 
+        /// <summary>
+        /// Raised by WriteToMod (mod export and launch) after BeforeWrite, for checks that should
+        /// run before the game sees the changes. Not raised by Save or autosave. May be raised on
+        /// a background thread; handlers must not throw to block the export.
+        /// </summary>
+        public static event Action BeforeExport;
+
         private static void RaiseBeforeWrite()
         {
             try
@@ -491,6 +498,14 @@ namespace Frosty.Core
         public void WriteToMod(string filename, ModSettings overrideSettings)
         {
             RaiseBeforeWrite();
+            try
+            {
+                BeforeExport?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                App.Logger.LogError($"Error in pre-export check: {ex.Message}");
+            }
             using (FrostyModWriter writer = new FrostyModWriter(new FileStream(filename, FileMode.Create), overrideSettings))
                 writer.WriteProject(this);
         }

@@ -1,0 +1,52 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctrl="clr-namespace:Frosty.Controls;assembly=FrostyControls"
+    xmlns:editors="clr-namespace:LevelEditorPlugin.Editors">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/FrostyControls;component/Themes/Generic.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <DataTemplate DataType="{x:Type editors:ValidationViewModel}">
+        <ctrl:FrostyDockablePanel BorderVisible="False" TitleBarVisible="False">
+            <Border BorderBrush="{StaticResource ControlBackground}" BorderThickness="0,2,0,0">
+                <DockPanel LastChildFill="True">
+                    <StackPanel
+                        Margin="4"
+                        DockPanel.Dock="Top"
+                        Orientation="Horizontal">
+                        <Button
+                            Margin="0,0,4,0"
+                            Padding="8,2"
+                            Command="{Binding Path=RunCommand}"
+                            Content="Run validation"
+                            ToolTip="Check the project's modified assets for broken references (also runs before Launch and export)" />
+                        <Button
+                            Margin="0,0,8,0"
+                            Padding="8,2"
+                            Command="{Binding Path=CopyCommand}"
+                            Content="Copy" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontWeight="Bold"
+                            Foreground="{StaticResource FontColor}"
+                            Text="{Binding Path=Summary}" />
+                    </StackPanel>
+                    <TextBox
+                        Background="{StaticResource ListBackground}"
+                        BorderThickness="0"
+                        FontFamily="Consolas"
+                        FontSize="11"
+                        Foreground="{StaticResource FontColor}"
+                        HorizontalScrollBarVisibility="Auto"
+                        IsReadOnly="True"
+                        Text="{Binding Path=ReportText, Mode=OneWay}"
+                        TextWrapping="NoWrap"
+                        VerticalScrollBarVisibility="Auto" />
+                </DockPanel>
+            </Border>
+        </ctrl:FrostyDockablePanel>
+    </DataTemplate>
+
+</ResourceDictionary>

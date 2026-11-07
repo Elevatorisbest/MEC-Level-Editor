@@ -2,6 +2,7 @@ using Frosty.Core;
 using LevelEditorPlugin.Diagnostics;
 using LevelEditorPlugin.Resources;
 using System;
+using System.Linq;
 using System.Windows;
 
 namespace LevelEditorPlugin.Editors;
@@ -21,6 +22,33 @@ public static class PendingEditsCommitter
             return;
         hooked = true;
         FrostyProject.BeforeWrite += CommitPending;
+        FrostyProject.BeforeExport += ValidateBeforeExport;
+    }
+
+    /// <summary>
+    /// Runs the reference validator before mod export / launch. Only warns (log, Validation
+    /// panel); it does not stop the export.
+    /// </summary>
+    private static void ValidateBeforeExport()
+    {
+        try
+        {
+            ValidationResult result = ReferenceValidator.Run();
+            if (result.Errors > 0 || result.Warnings > 0)
+            {
+                App.Logger.LogWarning($"Level editor validation: {result.Errors} error(s), {result.Warnings} warning(s) in modified assets - see the Validation panel or the level editor log. The export continues.");
+                foreach (ValidationIssue issue in result.Issues.Where(i => i.Severity == IssueSeverity.Error).Take(10))
+                    App.Logger.LogWarning($"  {issue.Asset}: {issue.Location}: {issue.Message}");
+            }
+            else
+            {
+                App.Logger.Log($"Level editor validation: no broken references ({result.AssetsChecked} modified assets checked)");
+            }
+        }
+        catch (Exception ex)
+        {
+            LevelEditorLog.Warning("Validation", "Pre-export validation failed", ex);
+        }
     }
 
     private static void CommitPending()

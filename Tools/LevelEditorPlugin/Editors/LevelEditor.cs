@@ -382,6 +382,13 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
                 },
                 new Controls.DockManager.DockLayoutData()
                 {
+                    UniqueId = ValidationViewModel.Uid,
+                    IsVisible = true,
+                    IsSelected = false,
+                    Location = Controls.DockLocation.BottomRight
+                },
+                new Controls.DockManager.DockLayoutData()
+                {
                     UniqueId = "UID_LevelEditor_Schematics",
                     IsVisible = false,
                     IsSelected = false,
@@ -406,6 +413,7 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide terrain layers tab", "Images/Terrain.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new TerrainLayersViewModel(this))), DockManager, "UID_LevelEditor_TerrainLayers"));
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide timeline editor", "Images/Timeline.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new TimelineViewModel(this))), DockManager, "UID_LevelEditor_Timeline"));
         toolbarItems.Add(new DockingToolbarItem("", "Show/Hide diagnostics (load report, log file)", DiagnosticsViewModel.IconPath, new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new DiagnosticsViewModel())), DockManager, DiagnosticsViewModel.Uid));
+        toolbarItems.Add(new DockingToolbarItem("", "Show/Hide validation (broken references in edits)", ValidationViewModel.IconPath, new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new ValidationViewModel())), DockManager, ValidationViewModel.Uid));
         //toolbarItems.Add(new FloatingOnlyDockingToolbarItem("", "Show/Hide schematics editor", "Images/Schematics.png", new RelayCommand((o) => DockManager.AddItem(((DockingToolbarItem)o).Location, new SchematicsViewModel(this, rootLayer))), DockManager, "UID_LevelEditor_Schematics"));
         //toolbarItems.Add(new RegularToolbarItem("", "Export all visible instances to XML", "LevelEditorPlugin/Images/XMLFile.png", new RelayCommand((o) => { ExportLevelAsXML(); })));
 
@@ -791,6 +799,7 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         TimedDockLoad(report, "Timeline panel", () => new TimelineViewModel(this));
         TimedDockLoad(report, "Terrain layers panel", () => new TerrainLayersViewModel(this));
         TimedDockLoad(report, "Diagnostics panel", () => new DiagnosticsViewModel());
+        TimedDockLoad(report, "Validation panel", () => new ValidationViewModel());
 
         // Panel layout/rendering happens after this method returns; measure until the UI thread is idle.
         Stopwatch uiIdleTimer = Stopwatch.StartNew();
