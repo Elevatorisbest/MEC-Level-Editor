@@ -72,6 +72,7 @@ public class LayersViewModel : Controls.IDockableItem, INotifyPropertyChanged
         SceneLayer entityLayer = owner.RootLayer;
         if (entityLayer == null)
             return;
+        entityLayer.IsExpanded = true;
 
         {
             Layers = [entityLayer];

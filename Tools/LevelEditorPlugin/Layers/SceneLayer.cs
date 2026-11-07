@@ -106,7 +106,9 @@ public class SceneLayer : INotifyPropertyChanged
         Entity = inEntity;
         LayerName = layerName;
         isVisible = true;
-        isExpanded = true;
+        // collapsed by default: with every layer expanded the tree created tens of thousands of
+        // controls for a city-sized level (slow to lay out, and slow for accessibility clients)
+        isExpanded = false;
         isSelected = false;
         layerColor = (color.HasValue) ? color.Value : new Color4(1.0f, 0.0f, 0.0f, 1.0f);
     }

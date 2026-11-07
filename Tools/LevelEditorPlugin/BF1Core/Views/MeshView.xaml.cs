@@ -84,6 +84,7 @@ public partial class MeshView : UserControl
         CheckBox_HelperIcons.IsChecked = LevelEditorViewFilter.HelperIcons;
         CheckBox_Instancing.IsChecked = LevelEditorViewFilter.Instancing;
         CheckBox_UiMeshes.IsChecked = LevelEditorViewFilter.UiMeshes;
+        CheckBox_BlockAutomation.IsChecked = AutomationBlocker.Enabled;
 
         // Initialize terrain edit mode UI
         if (CheckBox_TerrainEditMode != null)
@@ -147,6 +148,12 @@ public partial class MeshView : UserControl
         LevelEditorViewFilter.HelperIcons = CheckBox_HelperIcons.IsChecked == true;
         LevelEditorViewFilter.Instancing = CheckBox_Instancing.IsChecked == true;
         LevelEditorViewFilter.UiMeshes = CheckBox_UiMeshes.IsChecked == true;
+    }
+
+    private void CheckBox_BlockAutomation_Click(object sender, RoutedEventArgs e)
+    {
+        AutomationBlocker.Enabled = CheckBox_BlockAutomation.IsChecked == true;
+        App.Logger.Log($"Level editor: blocking UI Automation {(AutomationBlocker.Enabled ? "on" : "off")} - takes effect after restarting Frosty");
     }
 
     private void ComboBox_ViewMode_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

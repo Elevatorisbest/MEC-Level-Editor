@@ -24,6 +24,7 @@ public static class PendingEditsCommitter
         FrostyProject.BeforeWrite += CommitPending;
         FrostyProject.BeforeExport += ValidateBeforeExport;
         UiHangWatchdog.EnsureStarted();
+        AutomationBlocker.HookAllWindows();
     }
 
     /// <summary>

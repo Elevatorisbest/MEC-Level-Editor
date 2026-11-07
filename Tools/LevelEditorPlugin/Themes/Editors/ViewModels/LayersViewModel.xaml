@@ -15,13 +15,30 @@
     <DataTemplate DataType="{x:Type editors:LayersViewModel}">
         <ctrl:FrostyDockablePanel BorderVisible="False" TitleBarVisible="False">
             <Border BorderBrush="{StaticResource ControlBackground}" BorderThickness="0,2,0,0">
-                <TreeView x:Name="PART_LayersTreeView" ItemsSource="{Binding Path=Layers}">
+                <TreeView
+                    x:Name="PART_LayersTreeView"
+                    ItemsSource="{Binding Path=Layers}"
+                    ScrollViewer.CanContentScroll="True"
+                    VirtualizingPanel.IsVirtualizing="True"
+                    VirtualizingPanel.VirtualizationMode="Recycling">
+                    <TreeView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </TreeView.ItemsPanel>
                     <TreeView.ItemContainerStyle>
                         <Style BasedOn="{StaticResource StrechedTreeViewItemStyle}" TargetType="{x:Type TreeViewItem}">
                             <Setter Property="Foreground" Value="{StaticResource FontColor}" />
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="TreeViewItem.IsExpanded" Value="{Binding Path=IsExpanded, Mode=TwoWay}" />
                             <Setter Property="TreeViewItem.IsSelected" Value="{Binding Path=IsSelected, Mode=TwoWay}" />
+                            <Setter Property="ItemsPanel">
+                                <Setter.Value>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel />
+                                    </ItemsPanelTemplate>
+                                </Setter.Value>
+                            </Setter>
                         </Style>
                     </TreeView.ItemContainerStyle>
                     <TreeView.ItemTemplate>

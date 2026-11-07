@@ -112,6 +112,12 @@
                         Content="Light cards"
                         ToolTip="Flat glow-only meshes, e.g. Ground_Lights_02 over the streets and light-strip decals. The load report lists them." />
                     <CheckBox
+                        x:Name="CheckBox_BlockAutomation"
+                        Margin="3"
+                        Click="CheckBox_BlockAutomation_Click"
+                        Content="Block accessibility tools (prevents long freezes; restart Frosty to apply)"
+                        ToolTip="Stops UI Automation clients (screen readers and many helper/overlay apps) from reading the editor's windows. With a big level loaded they made the editor freeze for up to a minute, e.g. when opening the Map menu. Turn off if you use a screen reader." />
+                    <CheckBox
                         x:Name="CheckBox_UiMeshes"
                         Margin="3"
                         Click="ViewFilter_Click"
