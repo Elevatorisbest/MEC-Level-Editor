@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using SharpDX;
 using SharpDX.Direct3D11;
@@ -2742,7 +2742,11 @@ namespace Frosty.Core.Screens
         public override void Update(double timestep)
         {
             GFSDK_TXAA.Update(Viewport.ViewportWidth, Viewport.ViewportHeight);
-            camera.FrameMove((float)(timestep));
+            // Camera movement is speed x frame time. A frame that took long (the render thread
+            // waits for the UI thread to show each frame, so any ~1 s UI hitch makes one) used to
+            // move the camera a whole second's worth at once, a jump far ahead while a key was
+            // held. Cap the step so a hitch only pauses movement.
+            camera.FrameMove((float)Math.Min(timestep, 0.1));
             totalTime += timestep;
             lastDeltaTime = timestep;
         }

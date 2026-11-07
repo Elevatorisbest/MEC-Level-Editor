@@ -15,15 +15,18 @@ namespace LevelEditorPlugin.Diagnostics;
 public static class UiHangWatchdog
 {
     private const int PollMs = 250;
-    private const double ReportAfterSeconds = 1.0;
-    private const double StackAfterSeconds = 1.5;
-    private const int MaxStacksPerSession = 25;
+    // The viewport's render thread waits for the UI thread on every frame, so UI hitches well
+    // under a second already show up as viewport freezes.
+    private const double ReportAfterSeconds = 0.5;
+    private const double StackAfterSeconds = 0.6;
+    private const int MaxStacksPerSession = 40;
 
     private static Thread watchdog;
     private static Thread uiThread;
     private static Dispatcher dispatcher;
     private static long lastPong;
     private static int stacksTaken;
+    private static int gen0AtStart, gen1AtStart, gen2AtStart;
 
     public static void EnsureStarted()
     {
@@ -38,7 +41,7 @@ public static class UiHangWatchdog
         lastPong = Stopwatch.GetTimestamp();
         watchdog = new Thread(Run) { IsBackground = true, Name = "Level editor UI watchdog", Priority = ThreadPriority.AboveNormal };
         watchdog.Start();
-        LevelEditorLog.Info("Watchdog", "UI freeze watchdog started (logs freezes over 1 s with what the UI thread was doing)");
+        LevelEditorLog.Info("Watchdog", "UI freeze watchdog started (logs freezes over 0.5 s with what the UI thread was doing)");
     }
 
     private static double SecondsSince(long timestamp) => (Stopwatch.GetTimestamp() - timestamp) / (double)Stopwatch.Frequency;
@@ -65,6 +68,9 @@ public static class UiHangWatchdog
                         inHang = true;
                         stackTaken = false;
                         hangStart = Interlocked.Read(ref lastPong);
+                        gen0AtStart = GC.CollectionCount(0);
+                        gen1AtStart = GC.CollectionCount(1);
+                        gen2AtStart = GC.CollectionCount(2);
                     }
                     if (!stackTaken && blocked > StackAfterSeconds && stacksTaken < MaxStacksPerSession)
                     {
@@ -78,7 +84,8 @@ public static class UiHangWatchdog
                 {
                     inHang = false;
                     double total = (Interlocked.Read(ref lastPong) - hangStart) / (double)Stopwatch.Frequency;
-                    LevelEditorLog.Warning("Watchdog", $"UI thread was blocked for {total:0.0} s");
+                    string gcs = $"{GC.CollectionCount(0) - gen0AtStart}/{GC.CollectionCount(1) - gen1AtStart}/{GC.CollectionCount(2) - gen2AtStart}";
+                    LevelEditorLog.Warning("Watchdog", $"UI thread was blocked for {total:0.00} s (garbage collections during it, gen0/1/2: {gcs})");
                 }
             }
             catch (Exception)
