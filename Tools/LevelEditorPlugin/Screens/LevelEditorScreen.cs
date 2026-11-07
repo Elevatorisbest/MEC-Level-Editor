@@ -1211,7 +1211,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
         else if (ActiveGizmo == scaleGizmo)
         {
             // scale along the object's own axes
-            newWorld = Matrix.Scaling(Vector3.Modulate(startScale, scaleGizmo.DeltaScale)) * Matrix.RotationQuaternion(startRotation) * Matrix.Translation(startTranslation);
+            newWorld = Matrix.Scaling(startScale.X * scaleGizmo.DeltaScale.X, startScale.Y * scaleGizmo.DeltaScale.Y, startScale.Z * scaleGizmo.DeltaScale.Z) * Matrix.RotationQuaternion(startRotation) * Matrix.Translation(startTranslation);
         }
         else
         {
