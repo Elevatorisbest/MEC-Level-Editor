@@ -80,3 +80,13 @@ You can reorder anything whose dependencies allow it. Two choices you might want
 4. Which 2–3 levels or areas matter most. These become our fixed test cases.
 5. What currently works or breaks for you in this plugin, if you've used it.
 6. Whether to keep the other games' type SDK DLLs in the repo (`FrostySdk/Profiles`).
+
+## Status (2026-11-07)
+
+Done and verified in game: viewport performance (instancing, parallel culling), rendering
+fixes, one-click launch for Steam + EA app copies, move/rotate/scale gizmos with snapping,
+multi-select, typed transforms, undo/redo, automatic Havok write on save, Havok scale and
+bounds. See FINDINGS.md.
+
+Next, in order: validation of references before export; duplicate/delete with reference
+rewiring; scene tree with search and filters; asset browser; prefab-style groups.
