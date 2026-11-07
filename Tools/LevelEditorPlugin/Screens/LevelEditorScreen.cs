@@ -838,6 +838,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
             try
             {
                 MaterialInspector.LogSelection(entity.DisplayName, selectedProxies.OfType<ModelRenderProxy>().Select(p => p.MeshData).Distinct().ToList());
+                StreamingInspector.LogSelection(entity);
             }
             catch (Exception ex)
             {

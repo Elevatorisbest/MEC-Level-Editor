@@ -364,6 +364,9 @@ public abstract class Entity : INotifyPropertyChanged, IEbxType
         return data;
     }
 
+    /// <summary>The entity's ebx data object, whatever its type (for diagnostics).</summary>
+    public FrostySdk.Ebx.GameObjectData RawData => data;
+
     public void AddPropertyValue(string name, FrostySdk.Ebx.DataField dataField, FrostySdk.Ebx.PropertyConnection propConnection, Assets.Blueprint blueprint)
     {
         propertyValues.Add(new PropertyValue(name, dataField, propConnection, blueprint));

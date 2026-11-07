@@ -1,5 +1,6 @@
 using Frosty.Core;
 using LevelEditorPlugin.BF1Core.Native;
+using LevelEditorPlugin.Diagnostics;
 using System.Windows;
 
 namespace LevelEditorPlugin.BF1Core.Extensions;
@@ -28,6 +29,19 @@ public class BF1CoreMenuExtension : MenuExtension
         });
     }
 
+    private static int showCount;
+
+    /// <summary>
+    /// Logs how long it took from the menu click until the window was drawn and the UI thread was
+    /// idle again (first opening of a session was reported to be slow).
+    /// </summary>
+    private static void MeasureShow(string what)
+    {
+        int n = ++showCount;
+        PerfProbe probe = PerfProbe.Start("BF1 window", $"{what} (opening #{n} this session)");
+        Application.Current.Dispatcher.BeginInvoke(new System.Action(probe.Dispose), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     public override RelayCommand MenuItemClicked => new RelayCommand((o) =>
     {
         // First creation
@@ -37,6 +51,7 @@ public class BF1CoreMenuExtension : MenuExtension
         // Window hidden
         if (mainWindow.Visibility == Visibility.Hidden)
         {
+            MeasureShow("show window");
             mainWindow.Show();
             return;
         }
@@ -44,6 +59,7 @@ public class BF1CoreMenuExtension : MenuExtension
         // Window minimized
         if (mainWindow.WindowState == WindowState.Minimized)
         {
+            MeasureShow("restore minimized window");
             mainWindow.WindowState = WindowState.Normal;
             return;
         }
@@ -61,6 +77,7 @@ public class BF1CoreMenuExtension : MenuExtension
         mainWindow = null;
 
     RE_CREATE:
+        MeasureShow("create + show window");
         mainWindow = new MainWindow();
         mainWindow.Show();
     });

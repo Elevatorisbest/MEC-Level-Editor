@@ -222,6 +222,8 @@ public partial class MeshView : UserControl
         {
             TextBlock_EntityName.Text = "Null";
             TextBlock_LayerName.Text = "Null";
+            TextBlock_SubWorld.Text = "-";
+            TextBlock_StreamWarning.Visibility = Visibility.Collapsed;
 
             TextBox_TransX.Text = "0.00000";
             TextBox_TransY.Text = "0.00000";
@@ -241,6 +243,16 @@ public partial class MeshView : UserControl
         {
             TextBlock_EntityName.Text = Entity.DisplayName;
             TextBlock_LayerName.Text = Entity.Layer?.LayerName;
+            try
+            {
+                TextBlock_SubWorld.Text = LevelEditorPlugin.Diagnostics.StreamingInspector.DescribeChain(Entity, out bool zoneStreamed);
+                TextBlock_StreamWarning.Visibility = zoneStreamed ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception)
+            {
+                TextBlock_SubWorld.Text = "?";
+                TextBlock_StreamWarning.Visibility = Visibility.Collapsed;
+            }
 
             if (Entity is ISpatialEntity spatialEntity)
             {

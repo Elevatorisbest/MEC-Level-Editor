@@ -174,6 +174,26 @@
                             Margin="3"
                             Text="Layer Name" />
                     </DockPanel>
+                    <DockPanel>
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            FontWeight="Bold"
+                            Text="Sub-world:" />
+                        <TextBlock
+                            x:Name="TextBlock_SubWorld"
+                            Margin="3"
+                            Text="-"
+                            TextWrapping="Wrap"
+                            ToolTip="Objects only exist in the game (visuals and collision) while their sub-world is loaded. Zone-streamed sub-worlds load and unload with the player's position, so a stretched or moved object loses collision outside that zone's area." />
+                    </DockPanel>
+                    <TextBlock
+                        x:Name="TextBlock_StreamWarning"
+                        Margin="3,0,3,3"
+                        Foreground="Orange"
+                        Text="Zone streamed: in game this object only exists while the player is near its zone. Stretching or moving it far away will not keep its collision."
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
                 </StackPanel>
             </GroupBox>
 

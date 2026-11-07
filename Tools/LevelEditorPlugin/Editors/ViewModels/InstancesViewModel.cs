@@ -1,6 +1,7 @@
 using Frosty.Core;
 using Frosty.Core.Managers;
 using LevelEditorPlugin.BF1Core.Utils;
+using LevelEditorPlugin.Diagnostics;
 using LevelEditorPlugin.Entities;
 using LevelEditorPlugin.Layers;
 using System;
@@ -99,8 +100,11 @@ public class InstancesViewModel : Controls.IDockableItem, INotifyPropertyChanged
         }
 
         var filter = FilterText.Trim();
+        // a list, not a lazy query: the list box and the count binding enumerated the query again
+        // on every access (over every entity in the level)
         Instances = m_allEntities
-            .Where(e => e.DisplayName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0);
+            .Where(e => e.DisplayName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
+            .ToList();
     }
 
     private void SelectedEntityChangedFromScreen(object sender, Screens.SelectedEntityChangedEventArgs e)
@@ -116,7 +120,6 @@ public class InstancesViewModel : Controls.IDockableItem, INotifyPropertyChanged
         //m_owner.RootLayer.CollectEntities(entities);
 
         var rootLayer = m_owner.RootLayer;
-        App.Logger.Log($"rootLayer.Entity 类型：{rootLayer.Entity.GetType().BaseType.FullName}");
 
         SceneLayer entityLayer = null;
         if (rootLayer.Entity is SpatialPrefabReferenceObject spatialPrefab)
@@ -136,7 +139,7 @@ public class InstancesViewModel : Controls.IDockableItem, INotifyPropertyChanged
         Instances = entities;
         m_allEntities = entities;
 
-        App.Logger.Log($"UpdateEntityInstances 数量：{Instances.Count()}");
+        LevelEditorLog.Debug("Instances", $"Instances list rebuilt: {entities.Count} entities");
     }
 
     private void SceneLayerVisibilityChanged(object sender, Layers.LayerVisibilityChangedEventArgs e)

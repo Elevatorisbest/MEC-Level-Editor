@@ -10,6 +10,7 @@ using LevelEditorPlugin.Managers;
 using LevelEditorPlugin.Screens;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using LevelEditorPlugin.Diagnostics;
 
@@ -49,28 +50,22 @@ public static class MeshUtil
             option.Step = 0.0f;
         }
 
+        using PerfProbe probe = PerfProbe.Start("Copy", option.IsCopyToCamera ? $"copy {option.Entity.DisplayName} to camera" : $"copy {option.Entity.DisplayName} x{option.Count}");
+
         var ebxAssetEnity = App.AssetManager.GetEbxEntry(option.Entity.FileGuid);
         App.Logger.Log($"需要添加模型的Ebx文件为：{ebxAssetEnity.Name}");
 
         // 用于保存查询到的需要网络注册的组件Ebx资源实体
         var ebxAssetEnityList_NetReg = new List<EbxAssetEntry>();
-        // 网络注册
-        foreach (EbxAssetEntry subEntry in App.AssetManager.EnumerateEbx())
-        {
-            if (subEntry.ContainsDependency(ebxAssetEnity.Guid))
-            {
-                if (subEntry.Type == "NetworkRegistryAsset")
-                {
-                    ebxAssetEnityList_NetReg.Add(subEntry);
-                }
-            }
-        }
+        // network registries that list objects of this asset (cached list of registry assets)
+        ebxAssetEnityList_NetReg.AddRange(NetworkRegistriesReferencing(ebxAssetEnity.Guid));
 
         ///////////////////////////////////
 
         // 2026/01/22
         // 核心步骤（数据不一致的关键原因）
         // 复制模型这里使用统一的缓存数据，而不是自己直接Get读取，这样保证数据统一性
+        probe.Phase("find network registries");
         EbxAsset ebxAsset = LoadedAssetManager.Instance.GetEbxAsset(option.Entity.FileGuid);
         dynamic rootObject = ebxAsset.RootObject;
 
@@ -222,9 +217,12 @@ public static class MeshUtil
             await Task.Delay(1);
         }
 
+        probe.Phase("create the copied objects");
         // 更新并保存修改
         ebxAsset.Update();
+        probe.Phase("EbxAsset.Update");
         App.AssetManager.ModifyEbx(ebxAssetEnity.Name, ebxAsset);
+        probe.Phase("ModifyEbx");
         LevelEditorLog.Info("Copy", $"Copied {option.Entity.DisplayName} x{pointerRefList_CopyMesh.Count} into {ebxAssetEnity.Name} (network registries to update: {ebxAssetEnityList_NetReg.Count})");
 
         ///////////////////////////////////
@@ -253,6 +251,7 @@ public static class MeshUtil
             App.AssetManager.ModifyEbx(netRegEntry.Name, ebxAsset_NetReg);
         }
 
+        probe.Phase("update network registries");
         App.Logger.Log("----------");
 
         // 添加渲染
@@ -275,10 +274,48 @@ public static class MeshUtil
                 await Task.Delay(1);
             }
 
+            probe.Phase("create entities + render proxies");
             App.Logger.Log("==========");
 
             // 通知更新UI
-            LayerReloaded?.Invoke();
+            RaiseLayerReloaded(probe);
+        }
+    }
+
+    private static List<EbxAssetEntry> networkRegistries;
+
+    /// <summary>
+    /// NetworkRegistryAsset entries that depend on the given asset. The list of registry assets is
+    /// built once per session (it used to be a scan of every ebx asset in the game on each copy and
+    /// delete).
+    /// </summary>
+    private static IEnumerable<EbxAssetEntry> NetworkRegistriesReferencing(Guid assetGuid)
+    {
+        if (networkRegistries == null)
+        {
+            using (PerfProbe.Start("Copy", "build network registry list (once per session)"))
+                networkRegistries = App.AssetManager.EnumerateEbx("NetworkRegistryAsset").ToList();
+            LevelEditorLog.Info("Copy", $"{networkRegistries.Count} network registry assets");
+        }
+        return networkRegistries.Where(e => e.ContainsDependency(assetGuid)).ToList();
+    }
+
+    private static void RaiseLayerReloaded(PerfProbe probe)
+    {
+        Action handlers = LayerReloaded;
+        if (handlers == null)
+            return;
+        foreach (Action handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler();
+            }
+            catch (Exception ex)
+            {
+                LevelEditorLog.Warning("Layers", "Panel refresh after an edit failed", ex);
+            }
+            probe.Phase($"refresh {handler.Target?.GetType().Name ?? "panel"}");
         }
     }
 
@@ -331,6 +368,8 @@ public static class MeshUtil
             return;
         }
 
+        using PerfProbe probe = PerfProbe.Start("Delete", $"delete {option.Entity.DisplayName}");
+
         // 删除渲染
         {
             var layerRoot = option.Entity.FindAncestor<ReferenceObject>();
@@ -340,9 +379,10 @@ public static class MeshUtil
             await Task.Delay(1);
             layerRoot.DeleteEntity(option.Entity);
             await Task.Delay(1);
+            probe.Phase("remove entity + render proxy");
 
             // 通知更新UI
-            LayerReloaded?.Invoke();
+            RaiseLayerReloaded(probe);
         }
 
         ///////////////////////////////////
@@ -351,20 +391,12 @@ public static class MeshUtil
 
         var ebxAssetEnity = App.AssetManager.GetEbxEntry(option.Entity.FileGuid);
         App.Logger.Log($"需要删除模型的Ebx文件为：{ebxAssetEnity.Name}");
+        probe.Phase("start");
 
         // 用于保存查询到的需要移除网络注册的组件Ebx资源实体
         var ebxAssetEnityList_NetReg = new List<EbxAssetEntry>();
-        // 网络注册
-        foreach (EbxAssetEntry subEntry in App.AssetManager.EnumerateEbx())
-        {
-            if (subEntry.ContainsDependency(ebxAssetEnity.Guid))
-            {
-                if (subEntry.Type == "NetworkRegistryAsset")
-                {
-                    ebxAssetEnityList_NetReg.Add(subEntry);
-                }
-            }
-        }
+        // network registries that list objects of this asset (cached list of registry assets)
+        ebxAssetEnityList_NetReg.AddRange(NetworkRegistriesReferencing(ebxAssetEnity.Guid));
 
         ///////////////////////////////////
 
@@ -394,6 +426,7 @@ public static class MeshUtil
         // 待删除组件的ClassGuid
         Guid targetItemClassGuid = CoreUtil.GetInternalClassGuid(targetItemRef);
 
+        probe.Phase("find network registries + object");
         // 移除这个组件
         rootObject.Objects.Remove(targetItemRef);
         LevelEditorLog.Info("Delete", $"Deleted {option.Entity.DisplayName} ({targetItemClassGuid}) from {ebxAssetEnity.Name}. Note: connections referencing it are not removed yet.");
@@ -401,7 +434,9 @@ public static class MeshUtil
 
         // 更新并保存修改
         ebxAsset.Update();
+        probe.Phase("EbxAsset.Update");
         App.AssetManager.ModifyEbx(ebxAssetEnity.Name, ebxAsset);
+        probe.Phase("ModifyEbx");
 
         ///////////////////////////////////
 
