@@ -5,6 +5,7 @@ using FrostySdk.IO;
 using FrostySdk.Managers.Entries;
 using LevelEditorPlugin.Diagnostics;
 using LevelEditorPlugin.Entities;
+using Entity = LevelEditorPlugin.Entities.Entity;
 using LevelEditorPlugin.Managers;
 using LevelEditorPlugin.Screens;
 using System;
