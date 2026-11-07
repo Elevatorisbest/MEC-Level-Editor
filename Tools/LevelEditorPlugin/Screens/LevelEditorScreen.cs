@@ -49,6 +49,11 @@ public class GizmoRenderProxy : MeshRenderBase
 {
     public Matrix Transform { get; set; }
     public float Scale { get; protected set; }
+    /// <summary>Rotation of the gizmo (scale gizmo follows the object's axes); identity for world-aligned gizmos.</summary>
+    public Quaternion Orientation { get; set; } = Quaternion.Identity;
+
+    private readonly string colorTexture;
+    private readonly string selectMaskTexture;
 
     private ObjRenderable renderData;
 
@@ -79,9 +84,13 @@ public class GizmoRenderProxy : MeshRenderBase
         }
     });
 
-    public GizmoRenderProxy(RenderCreateState state, ObjRenderable meshData)
+    public GizmoRenderProxy(RenderCreateState state, ObjRenderable meshData,
+        string colorTexturePath = "Resources/Textures/TranslateGizmo.dds",
+        string selectMaskPath = "Resources/Textures/TranslateGizmoSelected.dds")
     {
         renderData = meshData;
+        colorTexture = colorTexturePath;
+        selectMaskTexture = selectMaskPath;
         Transform = Matrix.Identity;
         originalTransform = Transform;
 
@@ -95,7 +104,7 @@ public class GizmoRenderProxy : MeshRenderBase
         float distToCamera = (Transform.TranslationVector - cameraTransform.TranslationVector).Length();
         Scale = Math.Max(distToCamera / 5.0f, 0.125f);
 
-        Transform = Matrix.Scaling(Scale) * Matrix.Translation(Transform.TranslationVector);
+        Transform = Matrix.Scaling(Scale) * Matrix.RotationQuaternion(Orientation) * Matrix.Translation(Transform.TranslationVector);
 
         if (renderPath == MeshRenderPath.Forward)
         {
@@ -121,8 +130,8 @@ public class GizmoRenderProxy : MeshRenderBase
 
     private void CreateMaterial(RenderCreateState state)
     {
-        materialTextures.Add(new ShaderParameter("Texture", ShaderParameterType.Tex2d, $"Resources/Textures/TranslateGizmo.dds"));
-        materialTextures.Add(new ShaderParameter("SelectMask", ShaderParameterType.Tex2d, $"Resources/Textures/TranslateGizmoSelected.dds"));
+        materialTextures.Add(new ShaderParameter("Texture", ShaderParameterType.Tex2d, colorTexture));
+        materialTextures.Add(new ShaderParameter("SelectMask", ShaderParameterType.Tex2d, selectMaskTexture));
 
         permutation = state.ShaderLibrary.GetUserShader("GizmoShader", GeometryDecl);
         permutation.IsTwoSided = true;
@@ -165,11 +174,20 @@ public class Gizmo
         IsVisible = false;
     }
 
-    public void CreateRenderProxy(RenderCreateState state)
+    /// <summary>Gizmo meshes generated in code (rotate/scale) instead of loaded from Resources/Meshes.</summary>
+    protected bool proceduralMesh;
+
+    public virtual void CreateRenderProxy(RenderCreateState state)
     {
         meshData = LoadedMeshManager.Instance.LoadMesh(state, "TranslateGizmo");
         renderProxy = new GizmoRenderProxy(state, meshData);
     }
+
+    /// <summary>Gizmo size in world units at its current distance from the camera.</summary>
+    protected float WorldScale => renderProxy?.Scale > 0.0f ? renderProxy.Scale : 1.0f;
+
+    /// <summary>True while a drag is in progress and has moved.</summary>
+    public virtual bool IsDragging => false;
 
     public MeshRenderInstance GetInstance()
     {
@@ -203,13 +221,15 @@ public class Gizmo
     public void Dispose()
     {
         renderProxy.Dispose();
-        LoadedMeshManager.Instance.UnloadMesh(meshData);
+        if (!proceduralMesh)
+            LoadedMeshManager.Instance.UnloadMesh(meshData);
     }
 }
 
 public class TranslateGizmo : Gizmo
 {
     public bool IsMoving => moved;
+    public override bool IsDragging => moved;
 
     /// <summary>
     /// Grid step in metres for moving with the gizmo (0 = off). The moved axis snaps to whole
@@ -428,6 +448,47 @@ public class LevelEditorScreen : DeferredRenderScreen2
     private MeshRenderInstance[] sortItems = new MeshRenderInstance[0];
 
     private TranslateGizmo translateGizmo;
+    private RotateGizmo rotateGizmo;
+    private ScaleGizmo scaleGizmo;
+    // a selected spatial entity (or terrain vertex) shows the active gizmo
+    private bool showGizmo;
+    // the selected entity's world transform when the current gizmo drag started
+    private Matrix dragStartWorld;
+
+    private static GizmoMode gizmoMode = GizmoMode.Move;
+    /// <summary>Raised when the gizmo mode changes (side panel buttons follow it).</summary>
+    public static event Action GizmoModeChanged;
+
+    /// <summary>Move, rotate or scale gizmo (keys 1/2/3 or Space in the viewport, or the side panel).</summary>
+    public static GizmoMode CurrentGizmoMode
+    {
+        get => gizmoMode;
+        set
+        {
+            if (gizmoMode == value)
+                return;
+            gizmoMode = value;
+            GizmoModeChanged?.Invoke();
+        }
+    }
+
+    /// <summary>The gizmo that receives mouse input: always the move gizmo in terrain edit mode.</summary>
+    private Gizmo ActiveGizmo
+    {
+        get
+        {
+            if (TerrainEditState.IsTerrainEditModeEnabled)
+                return translateGizmo;
+            switch (gizmoMode)
+            {
+                case GizmoMode.Rotate: return rotateGizmo;
+                case GizmoMode.Scale: return scaleGizmo;
+                default: return translateGizmo;
+            }
+        }
+    }
+
+    private IEnumerable<Gizmo> AllGizmos => new Gizmo[] { translateGizmo, rotateGizmo, scaleGizmo };
     private BindableDepthTexture gizmoDepthTexture;
 
     public event EventHandler<SelectedEntityChangedEventArgs> SelectedEntityChanged;
@@ -436,16 +497,16 @@ public class LevelEditorScreen : DeferredRenderScreen2
     {
         GroundVisible = groundVisibleByDefault;
         translateGizmo = new TranslateGizmo();
+        rotateGizmo = new RotateGizmo();
+        scaleGizmo = new ScaleGizmo();
         Editors.PendingEditsCommitter.EnsureHooked();
-        {
-            int snap = Options.LevelEditorViewFilter.MoveSnapIndex;
-            float[] steps = Options.LevelEditorViewFilter.MoveSnapSteps;
-            TranslateGizmo.SnapStep = steps[Math.Max(0, Math.Min(snap, steps.Length - 1))];
-        }
+        Options.LevelEditorViewFilter.ApplySnapSettings();
 
         renderTasks.Enqueue(state =>
         {
             translateGizmo.CreateRenderProxy(state);
+            rotateGizmo.CreateRenderProxy(state);
+            scaleGizmo.CreateRenderProxy(state);
 
         });
     }
@@ -512,17 +573,22 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         base.Update(timestep);
 
-        translateGizmo.Update(RenderCreateState);
-        if (!translateGizmo.IsMoving)
+        // only the active gizmo is shown
+        Gizmo active = ActiveGizmo;
+        foreach (Gizmo gizmo in AllGizmos)
+            gizmo.IsVisible = showGizmo && gizmo == active;
+
+        if (!active.IsDragging && !TerrainEditState.IsTerrainEditModeEnabled)
         {
             if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.RequiresTransformUpdate)
             {
                 if (selectedProxies[0].OwnerEntity.Owner is ISpatialEntity spatialEntity)
-                {
-                    translateGizmo.Transform = Matrix.Translation(spatialEntity.GetTransform().TranslationVector);
-                }
+                    PlaceGizmos(spatialEntity);
             }
         }
+
+        foreach (Gizmo gizmo in AllGizmos)
+            gizmo.Update(RenderCreateState);
 
         long diagUpdateStart = System.Diagnostics.Stopwatch.GetTimestamp();
         int transformGeneration = Entity.TransformDirtyGeneration;
@@ -654,6 +720,8 @@ public class LevelEditorScreen : DeferredRenderScreen2
         base.DisposeBuffers();
 
         translateGizmo.Dispose();
+        rotateGizmo.Dispose();
+        scaleGizmo.Dispose();
 
         foreach (RenderProxy proxy in proxies)
             proxy.Dispose();
@@ -695,7 +763,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
     public void ClearSelection()
     {
-        translateGizmo.IsVisible = false;
+        showGizmo = false;
         renderTasks.Enqueue((state) =>
         {
             foreach (RenderProxy proxy in selectedProxies)
@@ -717,8 +785,8 @@ public class LevelEditorScreen : DeferredRenderScreen2
         // Show translate controller (including StaticModelGroup children, modification now supported)
         if (entity is ISpatialEntity spatialEntity)
         {
-            translateGizmo.Transform = Matrix.Translation(spatialEntity.GetTransform().TranslationVector);
-            translateGizmo.IsVisible = true;
+            PlaceGizmos(spatialEntity);
+            showGizmo = true;
         }
 
         renderTasks.Enqueue((state) =>
@@ -1132,8 +1200,24 @@ public class LevelEditorScreen : DeferredRenderScreen2
         if (Math.Abs(local.Determinant()) > 1e-8f)
             parentWorld = Matrix.Invert(local) * world;
 
-        world.Decompose(out Vector3 scale, out Quaternion rotation, out Vector3 _);
-        Matrix newWorld = Matrix.Scaling(scale) * Matrix.RotationQuaternion(rotation) * Matrix.Translation(translateGizmo.Transform.TranslationVector);
+        dragStartWorld.Decompose(out Vector3 startScale, out Quaternion startRotation, out Vector3 startTranslation);
+        Matrix newWorld;
+        if (ActiveGizmo == rotateGizmo)
+        {
+            // rotate about the object's origin around a world axis
+            // row vectors: object rotation first, then the world-axis rotation of the drag
+            newWorld = Matrix.Scaling(startScale) * Matrix.RotationQuaternion(startRotation) * Matrix.RotationQuaternion(rotateGizmo.DeltaRotation) * Matrix.Translation(startTranslation);
+        }
+        else if (ActiveGizmo == scaleGizmo)
+        {
+            // scale along the object's own axes
+            newWorld = Matrix.Scaling(Vector3.Modulate(startScale, scaleGizmo.DeltaScale)) * Matrix.RotationQuaternion(startRotation) * Matrix.Translation(startTranslation);
+        }
+        else
+        {
+            world.Decompose(out Vector3 scale, out Quaternion rotation, out Vector3 _);
+            newWorld = Matrix.Scaling(scale) * Matrix.RotationQuaternion(rotation) * Matrix.Translation(translateGizmo.Transform.TranslationVector);
+        }
 
         Matrix newLocal = newWorld;
         if (Math.Abs(parentWorld.Determinant()) > 1e-8f)
@@ -1142,13 +1226,43 @@ public class LevelEditorScreen : DeferredRenderScreen2
         spatialEntity.SetTransform(newLocal, suppressUpdate);
     }
 
+    /// <summary>Puts all gizmos at the entity's origin; the scale gizmo also takes its rotation.</summary>
+    private void PlaceGizmos(ISpatialEntity spatialEntity)
+    {
+        Matrix world = spatialEntity.GetTransform();
+        world.Decompose(out Vector3 _, out Quaternion rotation, out Vector3 translation);
+        foreach (Gizmo gizmo in AllGizmos)
+            gizmo.Transform = Matrix.Translation(translation);
+        scaleGizmo.Orientation = rotation;
+    }
+
+    public override void KeyDown(int key)
+    {
+        base.KeyDown(key);
+
+        // gizmo mode: 1 move, 2 rotate, 3 scale, Space cycles (not while dragging or with Ctrl)
+        System.Windows.Input.Key k = (System.Windows.Input.Key)key;
+        if (ActiveGizmo.IsDragging || (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) != 0)
+            return;
+        switch (k)
+        {
+            case System.Windows.Input.Key.D1: CurrentGizmoMode = GizmoMode.Move; break;
+            case System.Windows.Input.Key.D2: CurrentGizmoMode = GizmoMode.Rotate; break;
+            case System.Windows.Input.Key.D3: CurrentGizmoMode = GizmoMode.Scale; break;
+            case System.Windows.Input.Key.Space: CurrentGizmoMode = (GizmoMode)(((int)gizmoMode + 1) % 3); break;
+        }
+    }
+
     public override void MouseDown(int x, int y, MouseButton button)
     {
         // Non-terrain edit mode: keep original Gizmo logic
         if (!TerrainEditState.IsTerrainEditModeEnabled)
         {
-            if (translateGizmo.MouseDown(x, y, GetHitTestRay(x, y), button))
+            if (ActiveGizmo.MouseDown(x, y, GetHitTestRay(x, y), button))
             {
+                if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner is ISpatialEntity dragged)
+                    dragStartWorld = dragged.GetTransform();
+
                 // a drag starts a fresh undo unit (drop anything left pending by other code)
                 if (Frosty.Core.Managers.UndoManager.Instance != null)
                     Frosty.Core.Managers.UndoManager.Instance.PendingUndoUnit = null;
@@ -1182,7 +1296,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
     {
         // Non-terrain edit mode: keep original Gizmo end-drag logic (modify entity Transform)
         if (!TerrainEditState.IsTerrainEditModeEnabled &&
-            translateGizmo.MouseUp(x, y, GetHitTestRay(x, y), button))
+            ActiveGizmo.MouseUp(x, y, GetHitTestRay(x, y), button))
         {
             // Support StaticModelGroup child modification
             if (selectedProxies.Count > 0 && selectedProxies[0].OwnerEntity.Owner is ISpatialEntity spatialEntity)
@@ -1243,7 +1357,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
                                 // Place Gizmo at selected vertex position as edit handle
                                 translateGizmo.Transform = Matrix.Translation(sel.WorldPosition);
-                                translateGizmo.IsVisible = true;
+                                showGizmo = true;
 
                                 // Notify MeshView to refresh display
                                 MainWindow.UpdateEntityTransform();
@@ -1314,10 +1428,10 @@ public class LevelEditorScreen : DeferredRenderScreen2
         }
 
         // Normal mode: keep original Gizmo behavior - modify entity Transform
-        if (!translateGizmo.MouseMove(x, y, GetHitTestRay(x, y)))
+        if (!ActiveGizmo.MouseMove(x, y, GetHitTestRay(x, y)))
         {
             Ray ray = GetHitTestRay(x, y);
-            if (translateGizmo.HitTest(ray))
+            if (ActiveGizmo.HitTest(ray))
             {
                 // do something
             }
@@ -1370,8 +1484,11 @@ public class LevelEditorScreen : DeferredRenderScreen2
         Viewport.Context.OutputMerger.BlendState = D3DUtils.CreateBlendState(D3DUtils.CreateBlendStateRenderTarget());
 
         List<MeshRenderInstance> instances = [];
-        if (translateGizmo.IsVisible)
-            instances.Add(translateGizmo.GetInstance());
+        foreach (Gizmo gizmo in AllGizmos)
+        {
+            if (gizmo.IsVisible)
+                instances.Add(gizmo.GetInstance());
+        }
 
         RenderMeshes(MeshRenderPath.Forward, instances);
 

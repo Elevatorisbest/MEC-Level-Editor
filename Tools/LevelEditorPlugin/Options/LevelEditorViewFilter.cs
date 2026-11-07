@@ -17,6 +17,48 @@ public static class LevelEditorViewFilter
     private const string KeyInstancing = "LevelEditorView_Instancing";
     private const string KeyUiMeshes = "LevelEditorView_UiMeshes";
     private const string KeyMoveSnap = "LevelEditorView_MoveSnapIndex";
+    private const string KeyRotateSnap = "LevelEditorView_RotateSnapIndex";
+    private const string KeyScaleSnap = "LevelEditorView_ScaleSnapIndex";
+
+    /// <summary>Rotate snapping choices in degrees (0 = off).</summary>
+    public static readonly float[] RotateSnapSteps = { 0.0f, 1.0f, 5.0f, 15.0f, 22.5f, 45.0f, 90.0f };
+    /// <summary>Scale snapping choices as factor steps (0 = off).</summary>
+    public static readonly float[] ScaleSnapSteps = { 0.0f, 0.05f, 0.1f, 0.25f, 0.5f };
+    private static int? rotateSnapIndex, scaleSnapIndex;
+
+    public static int RotateSnapIndex
+    {
+        get => rotateSnapIndex ??= Config.Get(KeyRotateSnap, 3, ConfigScope.Game);
+        set
+        {
+            rotateSnapIndex = value;
+            Config.Add(KeyRotateSnap, value, ConfigScope.Game);
+            Config.Save();
+            ApplySnapSettings();
+        }
+    }
+
+    public static int ScaleSnapIndex
+    {
+        get => scaleSnapIndex ??= Config.Get(KeyScaleSnap, 0, ConfigScope.Game);
+        set
+        {
+            scaleSnapIndex = value;
+            Config.Add(KeyScaleSnap, value, ConfigScope.Game);
+            Config.Save();
+            ApplySnapSettings();
+        }
+    }
+
+    private static float Pick(float[] steps, int index) => steps[System.Math.Max(0, System.Math.Min(index, steps.Length - 1))];
+
+    /// <summary>Copies the saved snap settings to the gizmos.</summary>
+    public static void ApplySnapSettings()
+    {
+        Screens.TranslateGizmo.SnapStep = Pick(MoveSnapSteps, MoveSnapIndex);
+        Screens.RotateGizmo.SnapDegrees = Pick(RotateSnapSteps, RotateSnapIndex);
+        Screens.ScaleGizmo.SnapStep = Pick(ScaleSnapSteps, ScaleSnapIndex);
+    }
 
     /// <summary>Move snapping choices in metres (0 = off); index saved in config.</summary>
     public static readonly float[] MoveSnapSteps = { 0.0f, 0.05f, 0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f };
@@ -30,7 +72,7 @@ public static class LevelEditorViewFilter
             moveSnapIndex = value;
             Config.Add(KeyMoveSnap, value, ConfigScope.Game);
             Config.Save();
-            Screens.TranslateGizmo.SnapStep = MoveSnapSteps[System.Math.Max(0, System.Math.Min(value, MoveSnapSteps.Length - 1))];
+            ApplySnapSettings();
         }
     }
     private static bool? uiMeshes;

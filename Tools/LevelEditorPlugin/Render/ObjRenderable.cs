@@ -67,6 +67,27 @@ public class ObjRenderable
         }
     }
 
+    /// <summary>
+    /// Mesh built in code: vertices as Pos(3) Normal(3) TexCoord0(2) floats (GizmoShader layout),
+    /// 32-bit indices, triangle list.
+    /// </summary>
+    public ObjRenderable(RenderCreateState state, float[] vertices, uint[] indices, BoundingBox bounds)
+    {
+        Bounds = bounds;
+        vertexStride = 32;
+        primitiveType = PrimitiveTopology.TriangleList;
+        primitiveCount = indices.Length / 3;
+
+        using (DataStream stream = DataStream.Create(indices, true, false))
+            indexBuffer = new D3D11.Buffer(state.Device, stream, indices.Length * 4, D3D11.ResourceUsage.Default, D3D11.BindFlags.IndexBuffer, D3D11.CpuAccessFlags.None, D3D11.ResourceOptionFlags.None, 4);
+
+        using (DataStream stream = DataStream.Create(vertices, true, false))
+        {
+            vertexBuffer = new D3D11.Buffer(state.Device, stream, vertices.Length * 4, D3D11.ResourceUsage.Default, D3D11.BindFlags.VertexBuffer, D3D11.CpuAccessFlags.None, D3D11.ResourceOptionFlags.None, 0);
+            vertexBufferBinding = new D3D11.VertexBufferBinding(vertexBuffer, vertexStride, 0);
+        }
+    }
+
     public void Dispose()
     {
         vertexBuffer.Dispose();

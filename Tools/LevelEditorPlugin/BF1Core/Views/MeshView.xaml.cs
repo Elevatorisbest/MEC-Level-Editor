@@ -65,6 +65,13 @@ public partial class MeshView : UserControl
         ComboBox_ViewMode.ItemsSource = ViewModeItems;
         ComboBox_ViewMode.SelectedIndex = Math.Min(LevelEditorRenderingOptions.ViewModeIndex, ViewModeItems.Length - 1);
 
+        ComboBox_RotateSnap.ItemsSource = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Select(LevelEditorViewFilter.RotateSnapSteps, v => v > 0 ? $"{v:0.#}°" : "Off"));
+        ComboBox_RotateSnap.SelectedIndex = Math.Max(0, Math.Min(LevelEditorViewFilter.RotateSnapIndex, LevelEditorViewFilter.RotateSnapSteps.Length - 1));
+        ComboBox_ScaleSnap.ItemsSource = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Select(LevelEditorViewFilter.ScaleSnapSteps, v => v > 0 ? $"{v:0.##}" : "Off"));
+        ComboBox_ScaleSnap.SelectedIndex = Math.Max(0, Math.Min(LevelEditorViewFilter.ScaleSnapIndex, LevelEditorViewFilter.ScaleSnapSteps.Length - 1));
+        SyncGizmoModeButtons();
+        LevelEditorScreen.GizmoModeChanged += () => Dispatcher.BeginInvoke(new Action(SyncGizmoModeButtons));
+
         ComboBox_MoveSnap.ItemsSource = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Select(LevelEditorViewFilter.MoveSnapSteps, s => s > 0 ? $"{s:0.##} m" : "Off"));
         ComboBox_MoveSnap.SelectedIndex = Math.Max(0, Math.Min(LevelEditorViewFilter.MoveSnapIndex, LevelEditorViewFilter.MoveSnapSteps.Length - 1));
 
@@ -86,6 +93,38 @@ public partial class MeshView : UserControl
     private void OnPendingCommitChanged()
     {
         Dispatcher.InvokeAsync(UpdateWriteHavokButtonState);
+    }
+
+    private bool syncingGizmoMode;
+
+    private void SyncGizmoModeButtons()
+    {
+        syncingGizmoMode = true;
+        Radio_GizmoMove.IsChecked = LevelEditorScreen.CurrentGizmoMode == GizmoMode.Move;
+        Radio_GizmoRotate.IsChecked = LevelEditorScreen.CurrentGizmoMode == GizmoMode.Rotate;
+        Radio_GizmoScale.IsChecked = LevelEditorScreen.CurrentGizmoMode == GizmoMode.Scale;
+        syncingGizmoMode = false;
+    }
+
+    private void GizmoMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (syncingGizmoMode)
+            return;
+        if (sender == Radio_GizmoRotate) LevelEditorScreen.CurrentGizmoMode = GizmoMode.Rotate;
+        else if (sender == Radio_GizmoScale) LevelEditorScreen.CurrentGizmoMode = GizmoMode.Scale;
+        else LevelEditorScreen.CurrentGizmoMode = GizmoMode.Move;
+    }
+
+    private void ComboBox_RotateSnap_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (ComboBox_RotateSnap.SelectedIndex >= 0)
+            LevelEditorViewFilter.RotateSnapIndex = ComboBox_RotateSnap.SelectedIndex;
+    }
+
+    private void ComboBox_ScaleSnap_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (ComboBox_ScaleSnap.SelectedIndex >= 0)
+            LevelEditorViewFilter.ScaleSnapIndex = ComboBox_ScaleSnap.SelectedIndex;
     }
 
     private void ComboBox_MoveSnap_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

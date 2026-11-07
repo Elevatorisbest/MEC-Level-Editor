@@ -39,6 +39,41 @@
                             Width="70"
                             VerticalAlignment="Center"
                             FontWeight="Bold"
+                            Text="Gizmo:"
+                            ToolTip="Viewport keys: 1 move, 2 rotate, 3 scale, Space cycles." />
+                        <RadioButton x:Name="Radio_GizmoMove" Margin="0,0,8,0" VerticalAlignment="Center" GroupName="GizmoMode" Content="Move (1)" Checked="GizmoMode_Checked" />
+                        <RadioButton x:Name="Radio_GizmoRotate" Margin="0,0,8,0" VerticalAlignment="Center" GroupName="GizmoMode" Content="Rotate (2)" Checked="GizmoMode_Checked" />
+                        <RadioButton x:Name="Radio_GizmoScale" VerticalAlignment="Center" GroupName="GizmoMode" Content="Scale (3)" Checked="GizmoMode_Checked" />
+                    </DockPanel>
+                    <DockPanel Margin="3">
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            FontWeight="Bold"
+                            Text="Rotate snap:"
+                            ToolTip="Angle step for the rotate gizmo." />
+                        <ComboBox
+                            x:Name="ComboBox_RotateSnap"
+                            MinWidth="120"
+                            SelectionChanged="ComboBox_RotateSnap_SelectionChanged" />
+                    </DockPanel>
+                    <DockPanel Margin="3">
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            FontWeight="Bold"
+                            Text="Scale snap:"
+                            ToolTip="Scale factor step for the scale gizmo (0.1 gives 0.9, 1.0, 1.1, ...)." />
+                        <ComboBox
+                            x:Name="ComboBox_ScaleSnap"
+                            MinWidth="120"
+                            SelectionChanged="ComboBox_ScaleSnap_SelectionChanged" />
+                    </DockPanel>
+                    <DockPanel Margin="3">
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            FontWeight="Bold"
                             Text="Move snap:"
                             ToolTip="Grid step for moving with the gizmo. The dragged axis snaps to whole multiples of this, in world space." />
                         <ComboBox
