@@ -52,10 +52,7 @@ public class LayersViewModel : Controls.IDockableItem, INotifyPropertyChanged
 
         ////////////////
 
-        MeshUtil.LayerReloaded += () =>
-        {
-            ReloadLayer();
-        };
+        // copy/delete add or remove entities in the existing layers; the tree itself does not change
     }
 
     private void SelectedLayerChanged(object sender, Layers.LayerSelectionChangedEventArgs e)
@@ -68,17 +65,11 @@ public class LayersViewModel : Controls.IDockableItem, INotifyPropertyChanged
 
     private void ReloadLayer()
     {
-        SceneLayer rootLayer = owner.RootLayer;
-
-        SceneLayer entityLayer = null;
-        if (rootLayer.Entity is SpatialPrefabReferenceObject spatialPrefab)
-        {
-            entityLayer = spatialPrefab.GetLayer();
-        }
-        else if (rootLayer.Entity is SubWorldReferenceObject subWorld)
-        {
-            entityLayer = subWorld.GetLayer();
-        }
+        // The editor's own layer tree. This used to call GetLayer() again, which built a second,
+        // fresh tree: every sub-world that is not AutoLoad started hidden again (hiding the world
+        // after each copy/delete), the Instances panel listened to a different tree than the one
+        // shown here, and rebuilding took about a second.
+        SceneLayer entityLayer = owner.RootLayer;
         if (entityLayer == null)
             return;
 

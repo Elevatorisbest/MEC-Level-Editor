@@ -83,12 +83,7 @@ public class InstancesViewModel : Controls.IDockableItem, INotifyPropertyChanged
 
         ////////////////
 
-        MeshUtil.LayerReloaded += () =>
-        {
-            UpdateEntityInstances();
-            ApplyFilter();
-            NotifyPropertyChanged("Instances");
-        };
+        MeshUtil.LayerReloaded += ScheduleRefresh;
     }
 
     private void ApplyFilter()
@@ -116,20 +111,9 @@ public class InstancesViewModel : Controls.IDockableItem, INotifyPropertyChanged
     {
         var entities = new List<Entity>();
 
-        // 这是默认的方法
-        //m_owner.RootLayer.CollectEntities(entities);
-
-        var rootLayer = m_owner.RootLayer;
-
-        SceneLayer entityLayer = null;
-        if (rootLayer.Entity is SpatialPrefabReferenceObject spatialPrefab)
-        {
-            entityLayer = spatialPrefab.GetLayer();
-        }
-        else if (rootLayer.Entity is SubWorldReferenceObject subWorld)
-        {
-            entityLayer = subWorld.GetLayer();
-        }
+        // the editor's own layer tree (see LayersViewModel.ReloadLayer; rebuilding it with
+        // GetLayer() hid every non-AutoLoad sub-world)
+        SceneLayer entityLayer = m_owner.RootLayer;
         if (entityLayer == null)
             return;
 
@@ -144,7 +128,25 @@ public class InstancesViewModel : Controls.IDockableItem, INotifyPropertyChanged
 
     private void SceneLayerVisibilityChanged(object sender, Layers.LayerVisibilityChangedEventArgs e)
     {
-        UpdateEntityInstances();
+        // showing/hiding a layer raises this once for every layer below it (hundreds for the
+        // whole level), so the list is rebuilt once afterwards instead of each time
+        ScheduleRefresh();
+    }
+
+    private bool refreshPending;
+
+    private void ScheduleRefresh()
+    {
+        if (refreshPending)
+            return;
+        refreshPending = true;
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            refreshPending = false;
+            UpdateEntityInstances();
+            ApplyFilter();
+            NotifyPropertyChanged("Instances");
+        }), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void EntityDoubleClicked(object state)

@@ -23,6 +23,7 @@ public static class PendingEditsCommitter
         hooked = true;
         FrostyProject.BeforeWrite += CommitPending;
         FrostyProject.BeforeExport += ValidateBeforeExport;
+        UiHangWatchdog.EnsureStarted();
     }
 
     /// <summary>

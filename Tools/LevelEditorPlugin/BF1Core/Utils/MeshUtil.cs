@@ -265,7 +265,12 @@ public static class MeshUtil
 
                 // 为我们创建的新组件创建对应的Entity
                 Entities.Entity copyEntity = layerRoot.MyCreateEntity(itemRef.GetObjectAs<GameObjectData>());
-                copyEntity.Layer = option.Entity.Layer;
+                // into the same layer as the original, so it shows in the Instances panel and
+                // follows that layer's visibility
+                if (option.Entity.Layer != null)
+                    option.Entity.Layer.AddEntity(copyEntity);
+                else
+                    copyEntity.Layer = option.Entity.Layer;
 
                 await Task.Delay(1);
                 option.LevelEditorScreen.AddEntity(copyEntity);
@@ -378,6 +383,7 @@ public static class MeshUtil
             option.LevelEditorScreen.DeleteEntityFromRenderProxy(option.Entity);
             await Task.Delay(1);
             layerRoot.DeleteEntity(option.Entity);
+            option.Entity.Layer?.Entities.Remove(option.Entity);
             await Task.Delay(1);
             probe.Phase("remove entity + render proxy");
 
