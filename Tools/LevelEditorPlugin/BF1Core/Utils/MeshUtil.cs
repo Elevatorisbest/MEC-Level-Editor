@@ -26,17 +26,18 @@ public static class MeshUtil
     /// <summary>
     /// 复制选中的网格组件到当前蓝图中 
     /// </summary>
-    public static async Task CopySelectedMesh(CopyMeshOption option)
+    public static async Task<List<Entities.Entity>> CopySelectedMesh(CopyMeshOption option)
     {
+        var createdEntities = new List<Entities.Entity>();
         if (option.Entity == null)
         {
             App.Logger.LogError("当前Entity为Null");
-            return;
+            return createdEntities;
         }
         if (option.LevelEditorScreen == null)
         {
             App.Logger.LogError("当前LevelEditorScreen为Null");
-            return;
+            return createdEntities;
         }
         var camera = LevelEditorScreen.EditorCamera;
         if (option.IsCopyToCamera)
@@ -44,7 +45,7 @@ public static class MeshUtil
             if (camera == null)
             {
                 App.Logger.LogError("未找到当前地图编辑器相机");
-                return;
+                return createdEntities;
             }
             option.Count = 1;
             option.Step = 0.0f;
@@ -58,7 +59,7 @@ public static class MeshUtil
         // 用于保存查询到的需要网络注册的组件Ebx资源实体
         var ebxAssetEnityList_NetReg = new List<EbxAssetEntry>();
         // network registries that list objects of this asset (cached list of registry assets)
-        ebxAssetEnityList_NetReg.AddRange(NetworkRegistriesReferencing(ebxAssetEnity.Guid));
+        ebxAssetEnityList_NetReg.AddRange(NetworkRegistries.Referencing(ebxAssetEnity.Guid));
 
         ///////////////////////////////////
 
@@ -276,8 +277,12 @@ public static class MeshUtil
                 option.LevelEditorScreen.AddEntity(copyEntity);
                 await Task.Delay(1);
                 layerRoot.AddNewEntity(copyEntity);
+                createdEntities.Add(copyEntity);
                 await Task.Delay(1);
             }
+
+            if (createdEntities.Count > 0)
+                Frosty.Core.Managers.UndoManager.Instance.CommitUndo(new CopyEntitiesUndoUnit(createdEntities, option.LevelEditorScreen));
 
             probe.Phase("create entities + render proxies");
             App.Logger.Log("==========");
@@ -285,25 +290,12 @@ public static class MeshUtil
             // 通知更新UI
             RaiseLayerReloaded(probe);
         }
+
+        return createdEntities;
     }
 
-    private static List<EbxAssetEntry> networkRegistries;
-
-    /// <summary>
-    /// NetworkRegistryAsset entries that depend on the given asset. The list of registry assets is
-    /// built once per session (it used to be a scan of every ebx asset in the game on each copy and
-    /// delete).
-    /// </summary>
-    private static IEnumerable<EbxAssetEntry> NetworkRegistriesReferencing(Guid assetGuid)
-    {
-        if (networkRegistries == null)
-        {
-            using (PerfProbe.Start("Copy", "build network registry list (once per session)"))
-                networkRegistries = App.AssetManager.EnumerateEbx("NetworkRegistryAsset").ToList();
-            LevelEditorLog.Info("Copy", $"{networkRegistries.Count} network registry assets");
-        }
-        return networkRegistries.Where(e => e.ContainsDependency(assetGuid)).ToList();
-    }
+    /// <summary>Tells the panels that entities were added or removed (copy, delete, undo).</summary>
+    public static void NotifyEntitiesChanged() => LayerReloaded?.Invoke();
 
     private static void RaiseLayerReloaded(PerfProbe probe)
     {
@@ -375,98 +367,13 @@ public static class MeshUtil
 
         using PerfProbe probe = PerfProbe.Start("Delete", $"delete {option.Entity.DisplayName}");
 
-        // 删除渲染
-        {
-            var layerRoot = option.Entity.FindAncestor<ReferenceObject>();
+        EntityDeletion.Deselect(option.LevelEditorScreen);
+        DeletedEntity record = EntityDeletion.Delete(option.Entity, option.LevelEditorScreen);
+        probe.Phase("delete object, connections, references");
+        Frosty.Core.Managers.UndoManager.Instance.CommitUndo(new DeleteEntitiesUndoUnit(new List<DeletedEntity> { record }, option.LevelEditorScreen));
+        await Task.Yield();
 
-            await Task.Delay(1);
-            option.LevelEditorScreen.DeleteEntityFromRenderProxy(option.Entity);
-            await Task.Delay(1);
-            layerRoot.DeleteEntity(option.Entity);
-            option.Entity.Layer?.Entities.Remove(option.Entity);
-            await Task.Delay(1);
-            probe.Phase("remove entity + render proxy");
-
-            // 通知更新UI
-            RaiseLayerReloaded(probe);
-        }
-
-        ///////////////////////////////////
-
-        App.Logger.Log("==========");
-
-        var ebxAssetEnity = App.AssetManager.GetEbxEntry(option.Entity.FileGuid);
-        App.Logger.Log($"需要删除模型的Ebx文件为：{ebxAssetEnity.Name}");
-        probe.Phase("start");
-
-        // 用于保存查询到的需要移除网络注册的组件Ebx资源实体
-        var ebxAssetEnityList_NetReg = new List<EbxAssetEntry>();
-        // network registries that list objects of this asset (cached list of registry assets)
-        ebxAssetEnityList_NetReg.AddRange(NetworkRegistriesReferencing(ebxAssetEnity.Guid));
-
-        ///////////////////////////////////
-
-        // 2026/01/22
-        // 核心步骤（数据不一致的关键原因）
-        // 复制模型这里使用统一的缓存数据，而不是自己直接Get读取，这样保证数据统一性
-        EbxAsset ebxAsset = LoadedAssetManager.Instance.GetEbxAsset(option.Entity.FileGuid);
-        dynamic rootObject = ebxAsset.RootObject;
-
-        // 这个其实一个PointerRef
-        // FrostySdk.Ebx.PointerRef
-        dynamic targetItemRef = null;
-        // 这个Item也是一个PointerRef
-        foreach (dynamic itemRef in rootObject.Objects)
-        {
-            Guid guid = CoreUtil.GetInternalClassGuid(itemRef);
-            if (guid == option.Entity.InstanceGuid)
-            {
-                // 找到第一个就跳出循环
-                targetItemRef = itemRef;
-                break;
-            }
-        }
-        if (targetItemRef == null)
-            throw new Exception("没有在蓝图中找到指定组件");
-
-        // 待删除组件的ClassGuid
-        Guid targetItemClassGuid = CoreUtil.GetInternalClassGuid(targetItemRef);
-
-        probe.Phase("find network registries + object");
-        // 移除这个组件
-        rootObject.Objects.Remove(targetItemRef);
-        LevelEditorLog.Info("Delete", $"Deleted {option.Entity.DisplayName} ({targetItemClassGuid}) from {ebxAssetEnity.Name}. Note: connections referencing it are not removed yet.");
-        App.Logger.Log($"已删除组件 {targetItemClassGuid}，当前Objects数量：{rootObject.Objects.Count}");
-
-        // 更新并保存修改
-        ebxAsset.Update();
-        probe.Phase("EbxAsset.Update");
-        App.AssetManager.ModifyEbx(ebxAssetEnity.Name, ebxAsset);
-        probe.Phase("ModifyEbx");
-
-        ///////////////////////////////////
-
-        // 移除网络注册
-        foreach (EbxAssetEntry netRegEntry in ebxAssetEnityList_NetReg)
-        {
-            var ebxAsset_NetReg = App.AssetManager.GetEbx(netRegEntry);
-            dynamic rootObj_NetReg = ebxAsset_NetReg.RootObject;
-
-            // 采用倒序移除
-            for (int i = rootObj_NetReg.Objects.Count - 1; i >= 0; i--)
-            {
-                // FrostySdk.Ebx.PointerRef
-                PointerRef itemRef = rootObj_NetReg.Objects[i];
-                if (itemRef.External.FileGuid == option.Entity.FileGuid &&
-                    itemRef.External.ClassGuid == targetItemClassGuid)
-                {
-                    rootObj_NetReg.Objects.RemoveAt(i);
-                }
-            }
-
-            ebxAsset_NetReg.Update();
-            App.AssetManager.ModifyEbx(netRegEntry.Name, ebxAsset_NetReg);
-        }
+        RaiseLayerReloaded(probe);
     }
 }
 

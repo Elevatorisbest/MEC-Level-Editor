@@ -82,10 +82,80 @@ public class SpatialEditor : ToolbarAssetEditor, IEditorProvider
         InputBindings.Add(new System.Windows.Input.KeyBinding(redo, System.Windows.Input.Key.Y, System.Windows.Input.ModifierKeys.Control));
         InputBindings.Add(new System.Windows.Input.KeyBinding(redo, System.Windows.Input.Key.Z, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift));
 
+        // Delete removes the selected entity (with its connections), Ctrl+D duplicates it in place
+        // and selects the copy. Both can be undone. Text boxes keep their own Delete key.
+        InputBindings.Add(new System.Windows.Input.KeyBinding(new Frosty.Core.RelayCommand(_ => DeleteSelected()), System.Windows.Input.Key.Delete, System.Windows.Input.ModifierKeys.None));
+        InputBindings.Add(new System.Windows.Input.KeyBinding(new Frosty.Core.RelayCommand(_ => DuplicateSelected()), System.Windows.Input.Key.D, System.Windows.Input.ModifierKeys.Control));
+
         // edits made in this editor go into this editor's history even if another asset tab was
         // opened or closed in between
         PreviewMouseDown += (s, e) => MakeUndoCurrent();
         PreviewKeyDown += (s, e) => MakeUndoCurrent();
+    }
+
+    private bool editInProgress;
+
+    private async void DeleteSelected()
+    {
+        MakeUndoCurrent();
+        Entity target = selectedEntity;
+        if (target == null || editInProgress || screen == null)
+            return;
+        if (BF1Core.Utils.CoreUtil.IsBlueMesh(target))
+        {
+            App.NotificationManager.Show("Objects placed through a static model group (blue) cannot be deleted yet");
+            return;
+        }
+        editInProgress = true;
+        try
+        {
+            await BF1Core.Utils.MeshUtil.DeleteSelectedMesh(new BF1Core.Utils.DeleteMeshOption { Entity = target, LevelEditorScreen = screen });
+            App.NotificationManager.Show($"Deleted {target.DisplayName} (Ctrl+Z to undo)");
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.LevelEditorLog.Error("Delete", "Delete failed", ex);
+            App.NotificationManager.Show($"Delete failed: {ex.Message}");
+        }
+        finally
+        {
+            editInProgress = false;
+        }
+    }
+
+    private async void DuplicateSelected()
+    {
+        MakeUndoCurrent();
+        Entity target = selectedEntity;
+        if (target == null || editInProgress || screen == null)
+            return;
+        editInProgress = true;
+        try
+        {
+            List<Entity> copies = await BF1Core.Utils.MeshUtil.CopySelectedMesh(new BF1Core.Utils.CopyMeshOption
+            {
+                Entity = target,
+                LevelEditorScreen = screen,
+                IsCopyToCamera = false,
+                Count = 1,
+                Step = 0.0f,
+                CopyDirection = BF1Core.Enums.CopyDirection.ZAxisAdd,
+            });
+            if (copies.Count > 0)
+            {
+                SelectEntity(copies[0]);
+                App.NotificationManager.Show($"Duplicated {target.DisplayName} in place (move it with the gizmo; Ctrl+Z to undo)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.LevelEditorLog.Error("Copy", "Duplicate failed", ex);
+            App.NotificationManager.Show($"Duplicate failed: {ex.Message}");
+        }
+        finally
+        {
+            editInProgress = false;
+        }
     }
 
     private void UndoRedo(bool redo)
