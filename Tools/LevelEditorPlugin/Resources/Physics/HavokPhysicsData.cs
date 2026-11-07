@@ -1174,6 +1174,23 @@ namespace LevelEditorPlugin.Resources
             return outBuffer;
         }
 
+        /// <summary>
+        /// Diagnostics: for every static compound shape instance, its scale and the five header words
+        /// the reader does not interpret (the w components of the transform rows and the word after
+        /// the scale). Used to find out whether a flag must be set for the game to apply a scale.
+        /// </summary>
+        public void ForEachInstanceHeader(Action<Vector3, uint, uint, uint, uint, uint> visit)
+        {
+            foreach (hkBaseClass obj in (inst64.Objects[0] as Hkx.HavokPhysicsContainer).Objects)
+            {
+                if (obj is Hkx.hknpStaticCompoundShape compound)
+                {
+                    foreach (hknpStaticCompoundShape.hknpInstance instance in compound.Instances)
+                        visit(instance.Scale, instance.tmp1, instance.tmp2, instance.tmp3, instance.tmp4, instance.tmp5);
+                }
+            }
+        }
+
         public Matrix GetTransform(int index)
         {
             Matrix outTransform;

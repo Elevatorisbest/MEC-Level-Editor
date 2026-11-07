@@ -154,6 +154,17 @@ public class StaticModelGroupEntity : Entity, IEntityData<FrostySdk.Ebx.StaticMo
         : base(inData, inParent)
     {
         physicsData = GetPhysicsData(inData);
+        if (physicsData != null && LoadReport.Current != null)
+        {
+            try
+            {
+                physicsData.ForEachInstanceHeader(LoadReport.Current.HavokInstanceHeader);
+            }
+            catch (Exception ex)
+            {
+                LevelEditorLog.Debug("Load", $"Havok instance header diagnostics failed: {ex.Message}");
+            }
+        }
 
         int instCount = 0;
         int totalInstCount = 0;
