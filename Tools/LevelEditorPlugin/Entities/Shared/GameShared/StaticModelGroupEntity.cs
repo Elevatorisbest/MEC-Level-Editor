@@ -16,12 +16,13 @@ using LevelEditorPlugin.Diagnostics;
 
 namespace LevelEditorPlugin.Entities;
 
-public class StaticModelGroupElementMoveEntityUndoUnit : IUndoUnit
+public class StaticModelGroupElementMoveEntityUndoUnit : IRedoableUndoUnit
 {
     public string Text => "Move Entities";
 
     private StaticModelGroupElementEntity entity;
     private Matrix originalTransform;
+    private Matrix redoTransform;
 
     public StaticModelGroupElementMoveEntityUndoUnit(StaticModelGroupElementEntity inEntity, Matrix inOriginalTransform)
     {
@@ -36,8 +37,16 @@ public class StaticModelGroupElementMoveEntityUndoUnit : IUndoUnit
 
     public void Undo()
     {
+        redoTransform = entity.GetLocalTransform();
         (entity.Parent as StaticModelGroupEntity).UndoData(entity, originalTransform);
         (entity as ISpatialEntity).SetTransform(originalTransform, suppressUpdate: true);
+        entity.RequiresTransformUpdate = true;
+    }
+
+    public void Redo()
+    {
+        (entity as ISpatialEntity).SetTransform(redoTransform, suppressUpdate: true);
+        (entity.Parent as StaticModelGroupEntity).UpdateData(entity);
         entity.RequiresTransformUpdate = true;
     }
 }

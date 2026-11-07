@@ -233,7 +233,6 @@ public class TranslateGizmo : Gizmo
     private bool leftMouseDown;
     private bool moved;
 
-    private float offset;
 
     public TranslateGizmo()
     {
@@ -284,33 +283,55 @@ public class TranslateGizmo : Gizmo
         return false;
     }
 
+    // Drag state: the plane contains the dragged axis and faces the camera as much as possible; it is
+    // fixed at the drag start, and the hit point is projected onto the axis. (Before, each axis used
+    // one fixed world plane, which the camera can look along: the hit point then jumped far away and
+    // the object wobbled and ran off.)
+    private Vector3 dragStart;
+    private Vector3 dragAxis;
+    private Plane dragPlane;
+    private float dragStartAlongAxis;
+
+    private static Vector3 AxisVector(int axis)
+    {
+        // axis handles: 0 = Z, 1 = Y, 2 = X (see axisBoundingBoxes)
+        return axis == 0 ? Vector3.UnitZ : axis == 1 ? Vector3.UnitY : Vector3.UnitX;
+    }
+
+    private static Plane DragPlane(Vector3 origin, Vector3 axis, Vector3 viewDirection)
+    {
+        // normal = component of the view direction perpendicular to the axis
+        Vector3 normal = viewDirection - axis * Vector3.Dot(viewDirection, axis);
+        if (normal.LengthSquared() < 1e-6f)
+        {
+            // looking straight along the axis: any plane containing the axis
+            normal = Math.Abs(axis.Y) < 0.9f ? Vector3.Cross(axis, Vector3.UnitY) : Vector3.Cross(axis, Vector3.UnitX);
+        }
+        normal.Normalize();
+        return new Plane(origin, normal);
+    }
+
+    private bool AlongAxis(Ray ray, out float along)
+    {
+        along = 0.0f;
+        if (!ray.Intersects(ref dragPlane, out Vector3 hit))
+            return false;
+        along = Vector3.Dot(hit - dragStart, dragAxis);
+        // reject hits that are absurdly far away (ray nearly parallel to the plane)
+        return !float.IsNaN(along) && Math.Abs(along) < 100000.0f;
+    }
+
     public override bool MouseDown(int x, int y, Ray rayCast, MouseButton button)
     {
         if (button == MouseButton.Left && selectedAxis != -1)
         {
             leftMouseDown = true;
 
-            if (selectedAxis == 0)
-            {
-                Vector3 outPosition;
-                Plane axisPlane = new Plane(Transform.TranslationVector, Vector3.UnitX);
-                rayCast.Intersects(ref axisPlane, out outPosition);
-                offset = Transform.TranslationVector.Z - outPosition.Z;
-            }
-            else if (selectedAxis == 1)
-            {
-                Vector3 outPosition;
-                Plane axisPlane = new Plane(Transform.TranslationVector, Vector3.UnitZ);
-                rayCast.Intersects(ref axisPlane, out outPosition);
-                offset = Transform.TranslationVector.Y - outPosition.Y;
-            }
-            else if (selectedAxis == 2)
-            {
-                Vector3 outPosition;
-                Plane axisPlane = new Plane(Transform.TranslationVector, Vector3.UnitY);
-                rayCast.Intersects(ref axisPlane, out outPosition);
-                offset = Transform.TranslationVector.X - outPosition.X;
-            }
+            dragStart = Transform.TranslationVector;
+            dragAxis = AxisVector(selectedAxis);
+            dragPlane = DragPlane(dragStart, dragAxis, rayCast.Direction);
+            if (!AlongAxis(rayCast, out dragStartAlongAxis))
+                dragStartAlongAxis = 0.0f;
 
             return true;
         }
@@ -323,37 +344,17 @@ public class TranslateGizmo : Gizmo
         if (leftMouseDown)
         {
             moved = true;
-            if (selectedAxis == 0)
+            if (AlongAxis(rayCast, out float along))
             {
+                Vector3 position = dragStart + dragAxis * (along - dragStartAlongAxis);
+
+                // snap the dragged coordinate to the world grid
+                if (selectedAxis == 0) position.Z = Snap(position.Z);
+                else if (selectedAxis == 1) position.Y = Snap(position.Y);
+                else position.X = Snap(position.X);
+
                 Matrix m = Transform;
-
-                Vector3 outPosition;
-                Plane axisPlane = new Plane(m.TranslationVector, Vector3.UnitX);
-                rayCast.Intersects(ref axisPlane, out outPosition);
-
-                m.TranslationVector = new Vector3(Transform.TranslationVector.X, Transform.TranslationVector.Y, Snap(outPosition.Z + offset));
-                Transform = m;
-            }
-            else if (selectedAxis == 1)
-            {
-                Matrix m = Transform;
-
-                Vector3 outPosition;
-                Plane axisPlane = new Plane(m.TranslationVector, Vector3.UnitZ);
-                rayCast.Intersects(ref axisPlane, out outPosition);
-
-                m.TranslationVector = new Vector3(Transform.TranslationVector.X, Snap(outPosition.Y + offset), Transform.TranslationVector.Z);
-                Transform = m;
-            }
-            else if (selectedAxis == 2)
-            {
-                Matrix m = Transform;
-
-                Vector3 outPosition;
-                Plane axisPlane = new Plane(m.TranslationVector, Vector3.UnitY);
-                rayCast.Intersects(ref axisPlane, out outPosition);
-
-                m.TranslationVector = new Vector3(Snap(outPosition.X + offset), Transform.TranslationVector.Y, Transform.TranslationVector.Z);
+                m.TranslationVector = position;
                 Transform = m;
             }
 

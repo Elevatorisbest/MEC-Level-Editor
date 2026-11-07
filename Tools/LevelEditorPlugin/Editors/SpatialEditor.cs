@@ -73,6 +73,30 @@ public class SpatialEditor : ToolbarAssetEditor, IEditorProvider
         : base(inLogger)
     {
         dockManager = new Controls.DockManager(this);
+
+        // Undo/redo anywhere in the level editor, including the 3D view (its key presses are
+        // ordinary WPF key events that bubble up here). Text boxes handle their own Ctrl+Z first.
+        Frosty.Core.RelayCommand undo = new Frosty.Core.RelayCommand(_ => UndoRedo(redo: false));
+        Frosty.Core.RelayCommand redo = new Frosty.Core.RelayCommand(_ => UndoRedo(redo: true));
+        InputBindings.Add(new System.Windows.Input.KeyBinding(undo, System.Windows.Input.Key.Z, System.Windows.Input.ModifierKeys.Control));
+        InputBindings.Add(new System.Windows.Input.KeyBinding(redo, System.Windows.Input.Key.Y, System.Windows.Input.ModifierKeys.Control));
+        InputBindings.Add(new System.Windows.Input.KeyBinding(redo, System.Windows.Input.Key.Z, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift));
+    }
+
+    private void UndoRedo(bool redo)
+    {
+        try
+        {
+            if (redo)
+                Frosty.Core.Managers.UndoManager.Instance?.Redo();
+            else
+                Frosty.Core.Managers.UndoManager.Instance?.Undo();
+            BF1Core.MainWindow.UpdateEntityTransform();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.LevelEditorLog.Error("Edit", redo ? "Redo failed" : "Undo failed", ex);
+        }
     }
 
     public void SelectEntity(Entities.Entity newSelection)

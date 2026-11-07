@@ -6,12 +6,13 @@ using System.Collections.Generic;
 
 namespace LevelEditorPlugin.Entities;
 
-public class MoveEntityUndoUnit : IUndoUnit
+public class MoveEntityUndoUnit : IRedoableUndoUnit
 {
     public string Text => "Move Entities";
 
     private Entity entity;
     private Matrix originalTransform;
+    private Matrix redoTransform;
 
     public MoveEntityUndoUnit(Entity inEntity, Matrix inOriginalTransform)
     {
@@ -26,10 +27,19 @@ public class MoveEntityUndoUnit : IUndoUnit
 
     public void Undo()
     {
+        redoTransform = (entity as ISpatialEntity).GetLocalTransform();
         (entity as ISpatialEntity).SetTransform(originalTransform, suppressUpdate: true);
         entity.RequiresTransformUpdate = true;
 
         LoadedAssetManager.Instance.UndoUpdate((entity.Owner.Parent as ReferenceObject).Blueprint);
+    }
+
+    public void Redo()
+    {
+        (entity as ISpatialEntity).SetTransform(redoTransform, suppressUpdate: true);
+        entity.RequiresTransformUpdate = true;
+
+        LoadedAssetManager.Instance.UpdateAsset((entity.Owner.Parent as ReferenceObject).Blueprint);
     }
 }
 

@@ -10,6 +10,15 @@ namespace Frosty.Core.Managers
         void Undo();
     }
 
+    /// <summary>
+    /// An undo unit that can be applied again after Undo (UndoManager.Redo). Do() is only called
+    /// once, when the change is committed, and often just marks the asset as modified.
+    /// </summary>
+    public interface IRedoableUndoUnit : IUndoUnit
+    {
+        void Redo();
+    }
+
     public class GenericUndoUnit : IUndoUnit
     {
         public string Text { get; private set; }
@@ -106,8 +115,16 @@ namespace Frosty.Core.Managers
         private Stack<IUndoUnit> redoStack = new Stack<IUndoUnit>();
         private bool isUndoing;
 
+        public bool CanUndo => undoStack.Count > 0;
+        public bool CanRedo => redoStack.Count > 0;
+
         public void CommitUndo(IUndoUnit undoUnit)
         {
+            // callers commit PendingUndoUnit, which is null when nothing started one (e.g. a typed
+            // value without a drag); pushing null broke Undo
+            if (undoUnit == null)
+                return;
+
             undoStack.Push(undoUnit);
             redoStack.Clear();
 
@@ -132,6 +149,32 @@ namespace Frosty.Core.Managers
                 undoUnit.Undo();
                 isUndoing = false;
             }
+        }
+
+        public void Redo()
+        {
+            if (redoStack.Count == 0)
+                return;
+
+            IUndoUnit undoUnit = redoStack.Pop();
+            if (!(undoUnit is IRedoableUndoUnit redoable))
+            {
+                App.NotificationManager.Show($"Cannot redo: {undoUnit.Text}");
+                redoStack.Clear();
+                return;
+            }
+
+            isUndoing = true;
+            try
+            {
+                redoable.Redo();
+            }
+            finally
+            {
+                isUndoing = false;
+            }
+            undoStack.Push(undoUnit);
+            App.NotificationManager.Show($"Redo: {undoUnit.Text}");
         }
 
         public void Clear()
