@@ -100,7 +100,8 @@ public sealed class LoadReport
     public void HavokInstanceHeader(SharpDX.Vector3 scale, uint w1, uint w2, uint w3, uint w4, uint w5)
     {
         bool scaled = Math.Abs(scale.X - 1) > 1e-4f || Math.Abs(scale.Y - 1) > 1e-4f || Math.Abs(scale.Z - 1) > 1e-4f;
-        string key = $"{(scaled ? "scaled  " : "unscaled")} {w1:X8} {w2:X8} {w3:X8} {w4:X8} {w5:X8}";
+        // grouped by the flags word only (the 4th word varies per instance)
+        string key = $"{(scaled ? "scaled  " : "unscaled")} flags word {w1:X8}";
         lock (sync)
         {
             havokInstances++;
@@ -692,8 +693,8 @@ public sealed class LoadReport
             sb.AppendLine();
 
             sb.AppendLine($"Havok static compound instances: {havokInstances}, of which with scale other than 1: {havokScaledInstances}");
-            sb.AppendLine("  instance header words (w of rotation rows 1-3, w of translation, word after scale), most common first:");
-            foreach (KeyValuePair<string, int> kv in havokHeaders.OrderBy(k => k.Key.StartsWith("unscaled") ? 1 : 0).ThenByDescending(k => k.Value).Take(40))
+            sb.AppendLine("  instance flags word (w of the first transform row; 0x3F000000 | flags, HAS_SCALE = 0x08):");
+            foreach (KeyValuePair<string, int> kv in havokHeaders.OrderBy(k => k.Key).Take(40))
                 sb.AppendLine($"  {kv.Value,8}  {kv.Key}");
             sb.AppendLine();
 

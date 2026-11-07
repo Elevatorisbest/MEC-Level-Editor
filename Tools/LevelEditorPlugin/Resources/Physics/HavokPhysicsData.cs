@@ -1141,7 +1141,7 @@ namespace LevelEditorPlugin.Resources
                                 writer.Write(rotationMatrix.M11);
                                 writer.Write(rotationMatrix.M12);
                                 writer.Write(rotationMatrix.M13);
-                                writer.BaseStream.Position += 4;
+                                writer.Write(InstanceFlagsWithScale(instance.tmp1, scale));
 
                                 writer.Write(rotationMatrix.M21);
                                 writer.Write(rotationMatrix.M22);
@@ -1189,6 +1189,29 @@ namespace LevelEditorPlugin.Resources
                         visit(instance.Scale, instance.tmp1, instance.tmp2, instance.tmp3, instance.tmp4, instance.tmp5);
                 }
             }
+        }
+
+        // hknpShapeInstance flags, stored as a 24-bit integer in the w of the first transform row
+        // (float bits 0x3F000000 | value). Shipped MEC instances with a non-1 scale all have 0x4E =
+        // HAS_TRANSLATION | HAS_ROTATION | HAS_SCALE | IS_ENABLED; without HAS_SCALE the game
+        // ignores the written scale (collision did not follow scaling).
+        private const uint FlagHasTranslation = 1u << 1;
+        private const uint FlagHasRotation = 1u << 2;
+        private const uint FlagHasScale = 1u << 3;
+
+        /// <summary>The instance's flags word with translation/rotation set and scale set when the scale is not 1.</summary>
+        public static uint InstanceFlagsWithScale(uint original, Vector3 scale)
+        {
+            // only touch the word when it has the expected packed-integer layout
+            if ((original & 0xFF000000u) != 0x3F000000u)
+                return original;
+
+            uint flags = original & 0x00FFFFFFu;
+            flags |= FlagHasTranslation | FlagHasRotation;
+            bool scaled = Math.Abs(scale.X - 1) > 1e-4f || Math.Abs(scale.Y - 1) > 1e-4f || Math.Abs(scale.Z - 1) > 1e-4f;
+            if (scaled)
+                flags |= FlagHasScale;
+            return 0x3F000000u | flags;
         }
 
         public Matrix GetTransform(int index)
