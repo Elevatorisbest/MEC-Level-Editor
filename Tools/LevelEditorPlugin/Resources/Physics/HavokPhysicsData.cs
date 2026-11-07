@@ -294,8 +294,10 @@ namespace LevelEditorPlugin.Resources
             }
 
             public List<hknpInstance> Instances = [];
+            // probably the compound's AABB (min, max); offset of Unknown1 in the resource
             public Vector4 Unknown1;
             public Vector4 Unknown2;
+            public long AabbOffset;
             public hknpStaticCompoundShapeData ShapeData;
 
             public hknpStaticCompoundShape()
@@ -311,6 +313,7 @@ namespace LevelEditorPlugin.Resources
                 int numInstances = reader.ReadInt();
 
                 reader.Position += 0x14;
+                AabbOffset = reader.Position;
                 Unknown1 = new Vector4(
                     reader.ReadFloat(),
                     reader.ReadFloat(),
@@ -360,8 +363,10 @@ namespace LevelEditorPlugin.Resources
                 }
             }
 
+            // probably the tree's AABB (min, max), the domain its 8-bit node bounds are quantised in
             public Vector4 Unknown1;
             public Vector4 Unknown2;
+            public long AabbOffset;
             public List<byte[]> Unknowns = [];
             public long ArrayOffset;
             public TreeNode RootNode;
@@ -375,6 +380,7 @@ namespace LevelEditorPlugin.Resources
                 int numItems = reader.ReadInt();
                 reader.Position += 4;
 
+                AabbOffset = reader.Position;
                 Unknown1 = new Vector4(
                     reader.ReadFloat(),
                     reader.ReadFloat(),
@@ -1007,6 +1013,16 @@ namespace LevelEditorPlugin.Resources
         /// <summary>
         /// Only update in-memory transform, do not write to ModifyRes immediately. Call CommitToRes to write back.
         /// </summary>
+        // Group-space bounds of modified instances (from their render meshes), used to grow the
+        // compound's and the tree's AABB on save. Without this, collision of a piece moved or
+        // scaled outside the group's original bounds stopped at that boundary.
+        private readonly Dictionary<int, BoundingBox> modifiedInstanceBounds = new Dictionary<int, BoundingBox>();
+
+        public void SetInstanceBounds(int index, BoundingBox groupSpaceBounds)
+        {
+            modifiedInstanceBounds[index] = groupSpaceBounds;
+        }
+
         public void SetTransformInMemory(int index, Matrix newTransform)
         {
             modifiedData.SetTransform(index, newTransform);
@@ -1164,6 +1180,8 @@ namespace LevelEditorPlugin.Resources
                             }
                             index++;
                         }
+
+                        GrowAabbs(writer, obj as Hkx.hknpStaticCompoundShape);
                     }
                 }
             }
@@ -1212,6 +1230,43 @@ namespace LevelEditorPlugin.Resources
             if (scaled)
                 flags |= FlagHasScale;
             return 0x3F000000u | flags;
+        }
+
+        private void GrowAabbs(NativeWriter writer, Hkx.hknpStaticCompoundShape compound)
+        {
+            if (compound == null || modifiedInstanceBounds.Count == 0)
+                return;
+
+            BoundingBox grow = new BoundingBox(new Vector3(float.MaxValue), new Vector3(float.MinValue));
+            foreach (BoundingBox box in modifiedInstanceBounds.Values)
+                grow = BoundingBox.Merge(grow, box);
+            // a little margin for convex radius / rounding
+            grow = new BoundingBox(grow.Minimum - new Vector3(0.5f), grow.Maximum + new Vector3(0.5f));
+
+            WriteGrownAabb(writer, compound.AabbOffset, compound.Unknown1, compound.Unknown2, grow, "compound shape");
+            if (compound.ShapeData != null)
+                WriteGrownAabb(writer, compound.ShapeData.AabbOffset, compound.ShapeData.Unknown1, compound.ShapeData.Unknown2, grow, "compound tree");
+        }
+
+        private static void WriteGrownAabb(NativeWriter writer, long offset, Vector4 min, Vector4 max, BoundingBox grow, string what)
+        {
+            // only when the stored values look like a min/max box
+            if (offset <= 0 || min.X > max.X || min.Y > max.Y || min.Z > max.Z)
+            {
+                Diagnostics.LevelEditorLog.Warning("Edit", $"Havok {what}: values at 0x{offset:X} do not look like an AABB ({min} / {max}); not changed");
+                return;
+            }
+
+            Vector3 newMin = Vector3.Min(new Vector3(min.X, min.Y, min.Z), grow.Minimum);
+            Vector3 newMax = Vector3.Max(new Vector3(max.X, max.Y, max.Z), grow.Maximum);
+            if (newMin == new Vector3(min.X, min.Y, min.Z) && newMax == new Vector3(max.X, max.Y, max.Z))
+                return;
+
+            writer.Position = offset;
+            writer.Write(newMin.X); writer.Write(newMin.Y); writer.Write(newMin.Z);
+            writer.BaseStream.Position += 4;
+            writer.Write(newMax.X); writer.Write(newMax.Y); writer.Write(newMax.Z);
+            Diagnostics.LevelEditorLog.Info("Edit", $"Havok {what} AABB grown from ({min.X:0.#},{min.Y:0.#},{min.Z:0.#})-({max.X:0.#},{max.Y:0.#},{max.Z:0.#}) to ({newMin.X:0.#},{newMin.Y:0.#},{newMin.Z:0.#})-({newMax.X:0.#},{newMax.Y:0.#},{newMax.Z:0.#})");
         }
 
         public Matrix GetTransform(int index)

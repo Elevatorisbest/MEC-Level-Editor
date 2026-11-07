@@ -78,6 +78,27 @@ public class StaticModelGroupElementEntity : Entity, IEntityData<StaticModelGrou
         Data.Blueprint = new FrostySdk.Ebx.PointerRef(new EbxImportReference() { FileGuid = blueprint.FileGuid, ClassGuid = blueprint.InstanceGuid });
     }
 
+    /// <summary>
+    /// The render mesh's bounds in the group's space (mesh bounds through this element's local
+    /// transform), or null when the element has no static mesh. Approximates the collision bounds.
+    /// </summary>
+    public BoundingBox? GroupSpaceMeshBounds()
+    {
+        if (!(entity is StaticModelEntity model) || model.Mesh?.MeshData == null)
+            return null;
+
+        BoundingBox local = model.Mesh.MeshData.Bounds;
+        Matrix transform = GetLocalTransform();
+        Vector3 min = new Vector3(float.MaxValue), max = new Vector3(float.MinValue);
+        foreach (Vector3 corner in local.GetCorners())
+        {
+            Vector3 p = Vector3.TransformCoordinate(corner, transform);
+            min = Vector3.Min(min, p);
+            max = Vector3.Max(max, p);
+        }
+        return new BoundingBox(min, max);
+    }
+
     public virtual Matrix GetTransform()
     {
         Matrix m = Matrix.Identity;
@@ -286,6 +307,9 @@ public class StaticModelGroupEntity : Entity, IEntityData<FrostySdk.Ebx.StaticMo
         {
             // 仅更新内存，不立即写回 res，由 MeshView 中的按钮触发写回
             physicsData.SetTransformInMemory(entity.Data.Index, entity.GetLocalTransform());
+            BoundingBox? bounds = entity.GroupSpaceMeshBounds();
+            if (bounds.HasValue)
+                physicsData.SetInstanceBounds(entity.Data.Index, bounds.Value);
         }
         else
         {
