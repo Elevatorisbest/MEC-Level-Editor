@@ -121,9 +121,9 @@ public static class StreamingInspector
             return value.ToString();
         if (value is FrostySdk.Ebx.PointerRef reference)
         {
-            if (reference.Type == FrostySdk.Ebx.PointerRefType.Internal)
+            if (reference.Type == FrostySdk.IO.PointerRefType.Internal)
                 return reference.Internal?.GetType().Name ?? "null";
-            if (reference.Type == FrostySdk.Ebx.PointerRefType.External)
+            if (reference.Type == FrostySdk.IO.PointerRefType.External)
             {
                 var entry = Frosty.Core.App.AssetManager.GetEbxEntry(reference.External.FileGuid);
                 return $"-> {entry?.Name ?? reference.External.FileGuid.ToString()}";
