@@ -346,11 +346,30 @@
                     <TextBlock
                         Margin="3"
                         FontWeight="Bold"
-                        Text="Place an asset at the camera" />
+                        Text="Asset browser - place props and prefabs at the camera" />
                     <TextBlock
                         Margin="3,0,3,3"
-                        Text="Pick an ObjectBlueprint / prefab in the data explorer, or one from the list."
+                        Text="Type part of a name (several words narrow it down), pick a result, then Place (or double-click it). With the search empty the list shows your favourites and recently placed assets."
                         TextWrapping="Wrap" />
+                    <TextBox
+                        x:Name="TextBox_AssetSearch"
+                        Margin="3"
+                        TextChanged="TextBox_AssetSearch_TextChanged"
+                        ToolTip="Searches all ObjectBlueprint / PrefabBlueprint assets of the game by path and name, e.g. 'statue anc'" />
+                    <ListBox
+                        x:Name="ListBox_Assets"
+                        Height="180"
+                        Margin="3"
+                        DisplayMemberPath="Label"
+                        MouseDoubleClick="ListBox_Assets_MouseDoubleClick"
+                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                        SelectionChanged="ListBox_Assets_SelectionChanged"
+                        VirtualizingPanel.IsVirtualizing="True" />
+                    <TextBlock
+                        x:Name="TextBlock_AssetSearchInfo"
+                        Margin="3,0,3,3"
+                        Foreground="Gray"
+                        Text="" />
                     <WrapPanel Margin="3">
                         <TextBlock
                             Width="70"
@@ -369,43 +388,31 @@
                             GroupName="SpawnTarget"
                             ToolTip="The level's own blueprint, loaded the whole time the level is: use for things that must exist everywhere, like long bridges. Needs no selection." />
                     </WrapPanel>
-                    <DockPanel Margin="3">
-                        <TextBlock
-                            Width="70"
-                            VerticalAlignment="Center"
-                            Text="Explorer:" />
-                        <TextBlock
-                            x:Name="TextBlock_ExplorerAsset"
-                            VerticalAlignment="Center"
-                            Text="-"
-                            TextTrimming="CharacterEllipsis" />
-                    </DockPanel>
                     <WrapPanel>
                         <Button
-                            x:Name="Button_PlaceExplorerAsset"
+                            x:Name="Button_PlaceAsset"
                             Margin="3"
-                            Click="Button_PlaceExplorerAsset_Click"
-                            Content="Place explorer asset"
+                            Click="Button_PlaceAsset_Click"
+                            Content="Place at camera"
                             Foreground="#FEDB1D" />
                         <Button
-                            x:Name="Button_FavouriteExplorerAsset"
+                            x:Name="Button_FavouriteAsset"
                             Margin="3"
-                            Click="Button_FavouriteExplorerAsset_Click"
+                            Click="Button_FavouriteAsset_Click"
                             Content="&#x2605; Favourite"
-                            ToolTip="Add or remove the explorer asset from the favourites list" />
-                    </WrapPanel>
-                    <DockPanel Margin="3">
+                            ToolTip="Add or remove the picked asset from your favourites" />
                         <Button
-                            x:Name="Button_PlaceListAsset"
-                            Margin="3,0,0,0"
-                            Click="Button_PlaceListAsset_Click"
-                            Content="Place"
-                            DockPanel.Dock="Right"
-                            Foreground="#FEDB1D" />
-                        <ComboBox
-                            x:Name="ComboBox_SpawnList"
-                            ToolTip="Favourites (&#x2605;) and recently placed assets" />
-                    </DockPanel>
+                            x:Name="Button_UseExplorerAsset"
+                            Margin="3"
+                            Click="Button_UseExplorerAsset_Click"
+                            Content="Use data explorer selection"
+                            ToolTip="Pick the asset currently selected in Frosty's data explorer instead" />
+                    </WrapPanel>
+                    <TextBlock
+                        x:Name="TextBlock_PickedAsset"
+                        Margin="3"
+                        Text="Picked: (nothing)"
+                        TextTrimming="CharacterEllipsis" />
                     <TextBlock
                         x:Name="TextBlock_SpawnStatus"
                         Margin="3"

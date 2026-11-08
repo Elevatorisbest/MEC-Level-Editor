@@ -153,42 +153,130 @@ public partial class MeshView : UserControl
         LevelEditorViewFilter.UiMeshes = CheckBox_UiMeshes.IsChecked == true;
     }
 
-    // --- placing assets ---------------------------------------------------------------------
+    // --- asset browser / placing assets ----------------------------------------------------
 
-    private System.Windows.Threading.DispatcherTimer explorerTimer;
-    private EbxAssetEntry shownExplorerAsset;
+    private sealed class AssetItem
+    {
+        public EbxAssetEntry Entry;
+        public string Label { get; set; }
+        public override string ToString() => Label;
+    }
+
+    private static List<EbxAssetEntry> allBlueprints;
+    private static System.Threading.Tasks.Task<List<EbxAssetEntry>> loadingBlueprints;
+    private EbxAssetEntry pickedAsset;
+    private System.Windows.Threading.DispatcherTimer searchTimer;
 
     private void InitSpawnUi()
     {
-        RefreshSpawnList();
-        SpawnHistory.Changed += () => Dispatcher.BeginInvoke(new Action(RefreshSpawnList));
-        // the data explorer has no selection event we can reach from here; check twice a second
-        explorerTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        explorerTimer.Tick += (s, e) =>
+        searchTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        searchTimer.Tick += (s, e) =>
         {
-            if (!IsVisible)
-                return;
-            EbxAssetEntry asset = App.SelectedAsset;
-            if (asset == shownExplorerAsset)
-                return;
-            shownExplorerAsset = asset;
-            TextBlock_ExplorerAsset.Text = asset == null ? "-" : $"{asset.Filename} ({asset.Type})";
-            TextBlock_ExplorerAsset.ToolTip = asset?.Name;
+            searchTimer.Stop();
+            RunSearch();
         };
-        explorerTimer.Start();
+        SpawnHistory.Changed += () => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (string.IsNullOrWhiteSpace(TextBox_AssetSearch.Text))
+                RunSearch();
+        }));
+        IsVisibleChanged += (s, e) =>
+        {
+            if (IsVisible && ListBox_Assets.Items.Count == 0)
+                RunSearch();
+        };
     }
 
-    private void RefreshSpawnList()
+    private static System.Threading.Tasks.Task<List<EbxAssetEntry>> LoadBlueprints()
     {
-        string selected = ComboBox_SpawnList.SelectedItem as string;
-        List<string> items = SpawnHistory.Favourites.Select(n => "\u2605 " + n)
-            .Concat(SpawnHistory.Recent.Where(n => !SpawnHistory.IsFavourite(n)))
-            .ToList();
-        ComboBox_SpawnList.ItemsSource = items;
-        if (selected != null && items.Contains(selected))
-            ComboBox_SpawnList.SelectedItem = selected;
-        else if (items.Count > 0)
-            ComboBox_SpawnList.SelectedIndex = 0;
+        if (loadingBlueprints == null)
+        {
+            loadingBlueprints = System.Threading.Tasks.Task.Run(() =>
+            {
+                using (PerfProbe.Start("Browser", "list blueprint assets (once per session)"))
+                {
+                    List<EbxAssetEntry> list = App.AssetManager.EnumerateEbx("ObjectBlueprint")
+                        .Concat(App.AssetManager.EnumerateEbx("PrefabBlueprint"))
+                        .GroupBy(e => e.Guid).Select(g => g.First())
+                        .OrderBy(e => e.Filename, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    LevelEditorLog.Info("Browser", $"{list.Count} placeable blueprint assets");
+                    return list;
+                }
+            });
+        }
+        return loadingBlueprints;
+    }
+
+    private void TextBox_AssetSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        searchTimer.Stop();
+        searchTimer.Start();
+    }
+
+    private async void RunSearch()
+    {
+        string text = TextBox_AssetSearch.Text?.Trim() ?? "";
+        if (text.Length == 0)
+        {
+            List<AssetItem> items = new List<AssetItem>();
+            foreach (string name in SpawnHistory.Favourites)
+            {
+                EbxAssetEntry entry = App.AssetManager.GetEbxEntry(name);
+                if (entry != null)
+                    items.Add(new AssetItem { Entry = entry, Label = "\u2605 " + entry.Filename });
+            }
+            foreach (string name in SpawnHistory.Recent.Where(n => !SpawnHistory.IsFavourite(n)))
+            {
+                EbxAssetEntry entry = App.AssetManager.GetEbxEntry(name);
+                if (entry != null)
+                    items.Add(new AssetItem { Entry = entry, Label = "recent: " + entry.Filename });
+            }
+            ListBox_Assets.ItemsSource = items;
+            TextBlock_AssetSearchInfo.Text = items.Count == 0 ? "No favourites or recent assets yet - type to search." : "Favourites and recently placed. Type to search all assets.";
+            return;
+        }
+
+        if (allBlueprints == null)
+        {
+            TextBlock_AssetSearchInfo.Text = "Listing the game's blueprints (first search only)...";
+            allBlueprints = await LoadBlueprints();
+            if ((TextBox_AssetSearch.Text?.Trim() ?? "") != text)
+                return; // a newer search is queued
+        }
+
+        string[] terms = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        List<EbxAssetEntry> found = await System.Threading.Tasks.Task.Run(() => allBlueprints
+            .Where(e => terms.All(t => e.Name.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0))
+            .OrderBy(e => terms.All(t => e.Filename.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0) ? 0 : 1)
+            .ThenBy(e => e.Filename.Length)
+            .Take(300)
+            .ToList());
+        if ((TextBox_AssetSearch.Text?.Trim() ?? "") != text)
+            return;
+
+        ListBox_Assets.ItemsSource = found.Select(e => new AssetItem { Entry = e, Label = $"{(SpawnHistory.IsFavourite(e.Name) ? "\u2605 " : "")}{e.Filename}   ({e.Type})" }).ToList();
+        TextBlock_AssetSearchInfo.Text = found.Count == 300 ? "First 300 matches - add more words to narrow it down." : $"{found.Count} match(es)";
+    }
+
+    private void ListBox_Assets_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ListBox_Assets.SelectedItem is AssetItem item)
+            Pick(item.Entry);
+    }
+
+    private void ListBox_Assets_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ListBox_Assets.SelectedItem is AssetItem item)
+            Place(item.Entry);
+    }
+
+    private void Pick(EbxAssetEntry entry)
+    {
+        pickedAsset = entry;
+        TextBlock_PickedAsset.Text = entry == null ? "Picked: (nothing)" : $"Picked: {entry.Name}";
+        TextBlock_PickedAsset.ToolTip = entry?.Name;
+        ShowSpawnStatus(null);
     }
 
     private void ShowSpawnStatus(string text)
@@ -199,6 +287,11 @@ public partial class MeshView : UserControl
 
     private void Place(EbxAssetEntry asset)
     {
+        if (asset == null)
+        {
+            ShowSpawnStatus("Pick an asset first: search above and click a result.");
+            return;
+        }
         LevelEditorScreen screen = LevelEditorScreen ?? LevelEditorScreen.Active;
         if (screen == null)
         {
@@ -234,35 +327,28 @@ public partial class MeshView : UserControl
         }
     }
 
-    private void Button_PlaceExplorerAsset_Click(object sender, RoutedEventArgs e) => Place(App.SelectedAsset);
+    private void Button_PlaceAsset_Click(object sender, RoutedEventArgs e) => Place(pickedAsset);
 
-    private void Button_PlaceListAsset_Click(object sender, RoutedEventArgs e)
+    private void Button_UseExplorerAsset_Click(object sender, RoutedEventArgs e)
     {
-        if (!(ComboBox_SpawnList.SelectedItem is string item))
+        if (App.SelectedAsset == null)
         {
-            ShowSpawnStatus("The list is empty: place something from the explorer first, or add a favourite.");
+            ShowSpawnStatus("Nothing is selected in Frosty's data explorer.");
             return;
         }
-        string name = item.StartsWith("\u2605 ") ? item.Substring(2) : item;
-        EbxAssetEntry asset = App.AssetManager.GetEbxEntry(name);
-        if (asset == null)
-        {
-            ShowSpawnStatus($"{name} was not found in this game.");
-            return;
-        }
-        Place(asset);
+        Pick(App.SelectedAsset);
     }
 
-    private void Button_FavouriteExplorerAsset_Click(object sender, RoutedEventArgs e)
+    private void Button_FavouriteAsset_Click(object sender, RoutedEventArgs e)
     {
-        EbxAssetEntry asset = App.SelectedAsset;
-        if (asset == null)
+        if (pickedAsset == null)
         {
-            ShowSpawnStatus("Select an asset in the data explorer first.");
+            ShowSpawnStatus("Pick an asset first.");
             return;
         }
-        SpawnHistory.ToggleFavourite(asset.Name);
-        App.NotificationManager.Show(SpawnHistory.IsFavourite(asset.Name) ? $"Added {asset.Filename} to favourites" : $"Removed {asset.Filename} from favourites");
+        SpawnHistory.ToggleFavourite(pickedAsset.Name);
+        App.NotificationManager.Show(SpawnHistory.IsFavourite(pickedAsset.Name) ? $"Added {pickedAsset.Filename} to favourites" : $"Removed {pickedAsset.Filename} from favourites");
+        RunSearch();
     }
 
     private void CheckBox_BlockAutomation_Click(object sender, RoutedEventArgs e)
