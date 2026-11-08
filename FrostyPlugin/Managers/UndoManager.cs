@@ -19,7 +19,8 @@ namespace Frosty.Core.Managers
         void Redo();
     }
 
-    public class GenericUndoUnit : IUndoUnit
+    /// <summary>Redo of a generic unit runs its do-action again (the same thing commit ran).</summary>
+    public class GenericUndoUnit : IRedoableUndoUnit
     {
         public string Text { get; private set; }
 
@@ -42,9 +43,14 @@ namespace Frosty.Core.Managers
         {
             undoAction.Invoke(null);
         }
+
+        public void Redo()
+        {
+            doAction.Invoke(null);
+        }
     }
 
-    public class UndoContainer : IUndoUnit
+    public class UndoContainer : IRedoableUndoUnit
     {
         public string Text { get; private set; }
 
@@ -74,6 +80,17 @@ namespace Frosty.Core.Managers
             for (int i = children.Count - 1; i >= 0; i--)
             {
                 children[i].Undo();
+            }
+        }
+
+        public void Redo()
+        {
+            foreach (var undoUnit in children)
+            {
+                if (undoUnit is IRedoableUndoUnit redoable)
+                    redoable.Redo();
+                else
+                    undoUnit.Do();
             }
         }
     }
@@ -159,8 +176,8 @@ namespace Frosty.Core.Managers
             IUndoUnit undoUnit = redoStack.Pop();
             if (!(undoUnit is IRedoableUndoUnit redoable))
             {
-                App.NotificationManager.Show($"Cannot redo: {undoUnit.Text}");
-                redoStack.Clear();
+                // skip it rather than throwing the rest of the redo history away
+                App.NotificationManager.Show($"Cannot redo (skipped): {undoUnit.Text}");
                 return;
             }
 
@@ -168,6 +185,14 @@ namespace Frosty.Core.Managers
             try
             {
                 redoable.Redo();
+            }
+            catch (Exception ex)
+            {
+                // drop this step instead of leaving it on top of the redo stack, where every
+                // further Redo would hit it again; the rest of the history stays usable
+                App.Logger.LogError($"Redo of '{undoUnit.Text}' failed and was skipped: {ex.Message}");
+                App.NotificationManager.Show($"Redo failed (skipped): {undoUnit.Text}");
+                return;
             }
             finally
             {

@@ -37,8 +37,10 @@ public class InstancesViewModel : Controls.IDockableItem, INotifyPropertyChanged
         {
             if (m_selectedEntity != value)
             {
-                Entity prevSelection = m_selectedEntity;
-                UndoManager.Instance.CommitUndo(new GenericUndoUnit("Select Entity", (o) => { m_selectedEntity = value; SelectedEntityChanged(m_selectedEntity); }, (o) => { m_selectedEntity = prevSelection; SelectedEntityChanged(m_selectedEntity); NotifyPropertyChanged("SelectedEntity"); }));
+                // Selecting is not an undo step: it used to be one, and committing it cleared the
+                // redo history, so Redo stopped working after a click in this list.
+                m_selectedEntity = value;
+                SelectedEntityChanged(m_selectedEntity);
                 NotifyPropertyChanged();
             }
         }
