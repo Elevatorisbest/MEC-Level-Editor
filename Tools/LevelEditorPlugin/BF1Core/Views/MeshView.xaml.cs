@@ -314,8 +314,9 @@ public partial class MeshView : UserControl
         }
         try
         {
-            Entities.Entity placed = SpawnUtil.Spawn(asset, target, screen);
-            ShowSpawnStatus(check.BundleWarning != null ? "Placed. Warning: " + check.BundleWarning : null);
+            bool addToBundle = CheckBox_AddToBundle.IsChecked == true;
+            Entities.Entity placed = SpawnUtil.Spawn(asset, target, screen, addToBundle, out string bundleNote);
+            ShowSpawnStatus(bundleNote == null ? null : addToBundle ? "Placed. It was not loaded there, so it was " + bundleNote : "Placed. Warning: " + bundleNote);
             App.NotificationManager.Show($"Placed {asset.Filename} at the camera (Ctrl+Z to undo)");
             screen.EditorProvider?.SelectEntity(placed);
             LevelEditorLog.Info("Spawn", $"Target: {target.Description}");
@@ -328,6 +329,40 @@ public partial class MeshView : UserControl
     }
 
     private void Button_PlaceAsset_Click(object sender, RoutedEventArgs e) => Place(pickedAsset);
+
+    /// <summary>
+    /// For objects placed before bundles were handled (or copied from elsewhere): adds the
+    /// selected object's blueprint and its dependencies to its layer's bundle.
+    /// </summary>
+    private void Button_MakeAvailable_Click(object sender, RoutedEventArgs e)
+    {
+        if (!(Entity is ReferenceObject reference) || reference.Blueprint == null)
+        {
+            ShowSpawnStatus("Select a placed object (a reference to a blueprint) first.");
+            return;
+        }
+        EbxAssetEntry blueprint = App.AssetManager.GetEbxEntry(reference.Blueprint.FileGuid);
+        SpawnCheck check = SpawnUtil.Check(blueprint, SpawnTarget.SameAs(Entity));
+        if (!check.CanSpawn)
+        {
+            ShowSpawnStatus(check.Problem);
+            return;
+        }
+        if (check.BundleWarning == null)
+        {
+            ShowSpawnStatus($"{blueprint.Filename} is already in a bundle loaded there; nothing to do.");
+            return;
+        }
+        try
+        {
+            ShowSpawnStatus("Done: " + SpawnUtil.MakeAvailable(blueprint, check));
+        }
+        catch (Exception ex)
+        {
+            ShowSpawnStatus("Failed: " + ex.Message);
+            LevelEditorLog.Error("Bundles", $"Adding {blueprint.Name} to a bundle failed", ex);
+        }
+    }
 
     private void Button_UseExplorerAsset_Click(object sender, RoutedEventArgs e)
     {

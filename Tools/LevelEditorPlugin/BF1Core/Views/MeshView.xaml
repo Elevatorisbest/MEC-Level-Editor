@@ -388,6 +388,12 @@
                             GroupName="SpawnTarget"
                             ToolTip="The level's own blueprint, loaded the whole time the level is: use for things that must exist everywhere, like long bridges. Needs no selection." />
                     </WrapPanel>
+                    <CheckBox
+                        x:Name="CheckBox_AddToBundle"
+                        Margin="3"
+                        Content="Make it load there (add it and what it needs to the layer's bundle)"
+                        IsChecked="True"
+                        ToolTip="The game only loads assets that are in a bundle loaded at that place. Without this, assets taken from another district show in the editor but are missing in game." />
                     <WrapPanel>
                         <Button
                             x:Name="Button_PlaceAsset"
@@ -407,6 +413,12 @@
                             Click="Button_UseExplorerAsset_Click"
                             Content="Use data explorer selection"
                             ToolTip="Pick the asset currently selected in Frosty's data explorer instead" />
+                        <Button
+                            x:Name="Button_MakeAvailable"
+                            Margin="3"
+                            Click="Button_MakeAvailable_Click"
+                            Content="Fix selected: make it load"
+                            ToolTip="For an object you already placed: adds its blueprint and what it needs to its layer's bundle" />
                     </WrapPanel>
                     <TextBlock
                         x:Name="TextBlock_PickedAsset"

@@ -53,6 +53,8 @@ public sealed class SpawnCheck
     public string Problem;         // why it cannot be placed
     public string BundleWarning;   // set when the game might not have the asset loaded there
     public string TargetAsset;
+    public EbxAssetEntry TargetEntry;
+    public HashSet<int> LoadedBundles;
 }
 
 /// <summary>
@@ -105,6 +107,7 @@ public static class SpawnUtil
             return check;
         }
         check.TargetAsset = targetEntry.Name;
+        check.TargetEntry = targetEntry;
 
         // Heuristic: the game loads an asset when a bundle containing it is loaded. If the
         // blueprint shares no bundle with the target layer or the sub-worlds above it, it may
@@ -119,6 +122,7 @@ public static class SpawnUtil
                     loaded.UnionWith(e.EnumerateBundles());
             }
         }
+        check.LoadedBundles = loaded;
         if (!blueprint.EnumerateBundles().Any(loaded.Contains))
         {
             string bundles = string.Join(", ", blueprint.EnumerateBundles().Take(3).Select(b => App.AssetManager.GetBundleEntry(b)?.Name ?? b.ToString()));
@@ -133,11 +137,27 @@ public static class SpawnUtil
     /// Creates the reference object at the camera, its entity and render proxies, network
     /// registry entries, and an undo step. Returns the new entity.
     /// </summary>
-    public static Entity Spawn(EbxAssetEntry blueprint, SpawnTarget target, LevelEditorScreen screen)
+    /// <summary>
+    /// Adds the blueprint and what it needs to the target layer's bundle when it is not loaded
+    /// there already. Returns a description, or null when nothing was needed.
+    /// </summary>
+    public static string MakeAvailable(EbxAssetEntry blueprint, SpawnCheck check)
+    {
+        if (check.BundleWarning == null || check.TargetEntry == null)
+            return null;
+        int bundle = BundleAdder.TargetBundle(check.TargetEntry);
+        if (bundle < 0)
+            return $"{check.TargetEntry.Name} is in no bundle; nothing was added.";
+        using (PerfProbe.Start("Bundles", $"add {blueprint.Name} with dependencies"))
+            return BundleAdder.AddWithDependencies(blueprint, bundle, check.LoadedBundles).ToString();
+    }
+
+    public static Entity Spawn(EbxAssetEntry blueprint, SpawnTarget target, LevelEditorScreen screen, bool addMissingToBundle, out string bundleNote)
     {
         SpawnCheck check = Check(blueprint, target);
         if (!check.CanSpawn)
             throw new InvalidOperationException(check.Problem);
+        bundleNote = addMissingToBundle ? MakeAvailable(blueprint, check) : check.BundleWarning;
 
         var camera = LevelEditorScreen.EditorCamera;
         if (camera == null)
