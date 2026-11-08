@@ -373,11 +373,11 @@ public sealed class CopyEntitiesUndoUnit : IRedoableUndoUnit
     private readonly LevelEditorScreen screen;
     private List<DeletedEntity> removed;
 
-    public CopyEntitiesUndoUnit(List<Entity> copies, LevelEditorScreen screen)
+    public CopyEntitiesUndoUnit(List<Entity> copies, LevelEditorScreen screen, string verb = "Copy")
     {
         this.copies = copies;
         this.screen = screen;
-        Text = copies.Count == 1 ? $"Copy {copies[0].DisplayName}" : $"Copy {copies.Count} entities";
+        Text = copies.Count == 1 ? $"{verb} {copies[0].DisplayName}" : $"{verb} {copies.Count} entities";
     }
 
     public void Do()

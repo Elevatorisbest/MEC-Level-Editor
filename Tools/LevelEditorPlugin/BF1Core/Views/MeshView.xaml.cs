@@ -14,6 +14,8 @@ using LevelEditorPlugin.Screens;
 using SharpDX;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using FrostySdk.Managers.Entries;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -58,6 +60,7 @@ public partial class MeshView : UserControl
     public MeshView()
     {
         InitializeComponent();
+        InitSpawnUi();
 
         HotKey.KeyDownEvent += HotKey_KeyDownEvent;
         HavokPhysicsData.PendingCommitChanged += OnPendingCommitChanged;
@@ -148,6 +151,108 @@ public partial class MeshView : UserControl
         LevelEditorViewFilter.HelperIcons = CheckBox_HelperIcons.IsChecked == true;
         LevelEditorViewFilter.Instancing = CheckBox_Instancing.IsChecked == true;
         LevelEditorViewFilter.UiMeshes = CheckBox_UiMeshes.IsChecked == true;
+    }
+
+    // --- placing assets ---------------------------------------------------------------------
+
+    private System.Windows.Threading.DispatcherTimer explorerTimer;
+    private EbxAssetEntry shownExplorerAsset;
+
+    private void InitSpawnUi()
+    {
+        RefreshSpawnList();
+        SpawnHistory.Changed += () => Dispatcher.BeginInvoke(new Action(RefreshSpawnList));
+        // the data explorer has no selection event we can reach from here; check twice a second
+        explorerTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        explorerTimer.Tick += (s, e) =>
+        {
+            if (!IsVisible)
+                return;
+            EbxAssetEntry asset = App.SelectedAsset;
+            if (asset == shownExplorerAsset)
+                return;
+            shownExplorerAsset = asset;
+            TextBlock_ExplorerAsset.Text = asset == null ? "-" : $"{asset.Filename} ({asset.Type})";
+            TextBlock_ExplorerAsset.ToolTip = asset?.Name;
+        };
+        explorerTimer.Start();
+    }
+
+    private void RefreshSpawnList()
+    {
+        string selected = ComboBox_SpawnList.SelectedItem as string;
+        List<string> items = SpawnHistory.Favourites.Select(n => "\u2605 " + n)
+            .Concat(SpawnHistory.Recent.Where(n => !SpawnHistory.IsFavourite(n)))
+            .ToList();
+        ComboBox_SpawnList.ItemsSource = items;
+        if (selected != null && items.Contains(selected))
+            ComboBox_SpawnList.SelectedItem = selected;
+        else if (items.Count > 0)
+            ComboBox_SpawnList.SelectedIndex = 0;
+    }
+
+    private void ShowSpawnStatus(string text)
+    {
+        TextBlock_SpawnStatus.Text = text ?? "";
+        TextBlock_SpawnStatus.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void Place(EbxAssetEntry asset)
+    {
+        if (LevelEditorScreen == null)
+        {
+            ShowSpawnStatus("Open a level first.");
+            return;
+        }
+        SpawnCheck check = SpawnUtil.Check(asset, Entity);
+        if (!check.CanSpawn)
+        {
+            ShowSpawnStatus(check.Problem);
+            return;
+        }
+        try
+        {
+            Entities.Entity placed = SpawnUtil.Spawn(asset, Entity, LevelEditorScreen);
+            ShowSpawnStatus(check.BundleWarning != null ? "Placed. Warning: " + check.BundleWarning : null);
+            App.NotificationManager.Show($"Placed {asset.Filename} at the camera (Ctrl+Z to undo)");
+            LevelEditorScreen.EditorProvider?.SelectEntity(placed);
+        }
+        catch (Exception ex)
+        {
+            ShowSpawnStatus("Could not place it: " + ex.Message);
+            LevelEditorLog.Error("Spawn", $"Placing {asset.Name} failed", ex);
+        }
+    }
+
+    private void Button_PlaceExplorerAsset_Click(object sender, RoutedEventArgs e) => Place(App.SelectedAsset);
+
+    private void Button_PlaceListAsset_Click(object sender, RoutedEventArgs e)
+    {
+        if (!(ComboBox_SpawnList.SelectedItem is string item))
+        {
+            ShowSpawnStatus("The list is empty: place something from the explorer first, or add a favourite.");
+            return;
+        }
+        string name = item.StartsWith("\u2605 ") ? item.Substring(2) : item;
+        EbxAssetEntry asset = App.AssetManager.GetEbxEntry(name);
+        if (asset == null)
+        {
+            ShowSpawnStatus($"{name} was not found in this game.");
+            return;
+        }
+        Place(asset);
+    }
+
+    private void Button_FavouriteExplorerAsset_Click(object sender, RoutedEventArgs e)
+    {
+        EbxAssetEntry asset = App.SelectedAsset;
+        if (asset == null)
+        {
+            ShowSpawnStatus("Select an asset in the data explorer first.");
+            return;
+        }
+        SpawnHistory.ToggleFavourite(asset.Name);
+        App.NotificationManager.Show(SpawnHistory.IsFavourite(asset.Name) ? $"Added {asset.Filename} to favourites" : $"Removed {asset.Filename} from favourites");
     }
 
     private void CheckBox_BlockAutomation_Click(object sender, RoutedEventArgs e)

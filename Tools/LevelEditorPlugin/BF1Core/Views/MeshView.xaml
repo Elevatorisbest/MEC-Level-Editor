@@ -343,6 +343,60 @@
 
                     <Separator />
 
+                    <TextBlock
+                        Margin="3"
+                        FontWeight="Bold"
+                        Text="Place an asset at the camera" />
+                    <TextBlock
+                        Margin="3,0,3,3"
+                        Text="Goes into the same layer as the selected object. Pick an ObjectBlueprint / prefab in the data explorer, or one from the list."
+                        TextWrapping="Wrap" />
+                    <DockPanel Margin="3">
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            Text="Explorer:" />
+                        <TextBlock
+                            x:Name="TextBlock_ExplorerAsset"
+                            VerticalAlignment="Center"
+                            Text="-"
+                            TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                    <WrapPanel>
+                        <Button
+                            x:Name="Button_PlaceExplorerAsset"
+                            Margin="3"
+                            Click="Button_PlaceExplorerAsset_Click"
+                            Content="Place explorer asset"
+                            Foreground="#FEDB1D" />
+                        <Button
+                            x:Name="Button_FavouriteExplorerAsset"
+                            Margin="3"
+                            Click="Button_FavouriteExplorerAsset_Click"
+                            Content="&#x2605; Favourite"
+                            ToolTip="Add or remove the explorer asset from the favourites list" />
+                    </WrapPanel>
+                    <DockPanel Margin="3">
+                        <Button
+                            x:Name="Button_PlaceListAsset"
+                            Margin="3,0,0,0"
+                            Click="Button_PlaceListAsset_Click"
+                            Content="Place"
+                            DockPanel.Dock="Right"
+                            Foreground="#FEDB1D" />
+                        <ComboBox
+                            x:Name="ComboBox_SpawnList"
+                            ToolTip="Favourites (&#x2605;) and recently placed assets" />
+                    </DockPanel>
+                    <TextBlock
+                        x:Name="TextBlock_SpawnStatus"
+                        Margin="3"
+                        Foreground="Orange"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+
+                    <Separator />
+
                     <WrapPanel>
                         <Button
                             x:Name="Button_DeleteSelectedEntity"

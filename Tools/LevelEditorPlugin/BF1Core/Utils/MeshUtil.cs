@@ -316,7 +316,7 @@ public static class MeshUtil
         }
     }
 
-    private static void SetIfPresent(object target, string propertyName, object value)
+    internal static void SetIfPresent(object target, string propertyName, object value)
     {
         System.Reflection.PropertyInfo property = target.GetType().GetProperty(propertyName);
         if (property == null || !property.CanWrite)
@@ -327,7 +327,7 @@ public static class MeshUtil
         property.SetValue(target, value);
     }
 
-    private static void SetEnumIfPresent(object target, string propertyName, string enumValueName)
+    internal static void SetEnumIfPresent(object target, string propertyName, string enumValueName)
     {
         System.Reflection.PropertyInfo property = target.GetType().GetProperty(propertyName);
         if (property == null || !property.CanWrite || !property.PropertyType.IsEnum)
