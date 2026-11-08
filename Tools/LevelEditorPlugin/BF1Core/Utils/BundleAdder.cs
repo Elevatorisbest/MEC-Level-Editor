@@ -8,6 +8,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using BundleType = FrostySdk.Managers.Entries.BundleType;
 
 namespace LevelEditorPlugin.BF1Core.Utils;
 
