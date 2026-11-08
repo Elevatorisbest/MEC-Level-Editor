@@ -199,12 +199,21 @@ public partial class MeshView : UserControl
 
     private void Place(EbxAssetEntry asset)
     {
-        if (LevelEditorScreen == null)
+        LevelEditorScreen screen = LevelEditorScreen ?? LevelEditorScreen.Active;
+        if (screen == null)
         {
-            ShowSpawnStatus("Open a level first.");
+            ShowSpawnStatus("Open a level in the level editor first (and click into its view once).");
             return;
         }
-        SpawnCheck check = SpawnUtil.Check(asset, Entity);
+        SpawnTarget target = RadioButton_SpawnIntoLevelRoot.IsChecked == true
+            ? SpawnTarget.LevelRoot(screen)
+            : SpawnTarget.SameAs(Entity);
+        if (target == null && RadioButton_SpawnIntoLevelRoot.IsChecked != true)
+        {
+            ShowSpawnStatus("Select an object in the level first (the new one goes into its layer), or choose 'Level root'.");
+            return;
+        }
+        SpawnCheck check = SpawnUtil.Check(asset, target);
         if (!check.CanSpawn)
         {
             ShowSpawnStatus(check.Problem);
@@ -212,10 +221,11 @@ public partial class MeshView : UserControl
         }
         try
         {
-            Entities.Entity placed = SpawnUtil.Spawn(asset, Entity, LevelEditorScreen);
+            Entities.Entity placed = SpawnUtil.Spawn(asset, target, screen);
             ShowSpawnStatus(check.BundleWarning != null ? "Placed. Warning: " + check.BundleWarning : null);
             App.NotificationManager.Show($"Placed {asset.Filename} at the camera (Ctrl+Z to undo)");
-            LevelEditorScreen.EditorProvider?.SelectEntity(placed);
+            screen.EditorProvider?.SelectEntity(placed);
+            LevelEditorLog.Info("Spawn", $"Target: {target.Description}");
         }
         catch (Exception ex)
         {

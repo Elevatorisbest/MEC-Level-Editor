@@ -16,6 +16,35 @@ using Entity = LevelEditorPlugin.Entities.Entity;
 
 namespace LevelEditorPlugin.BF1Core.Utils;
 
+/// <summary>Where a placed object goes: a blueprint (layer / sub-world / level) and its scene layer.</summary>
+public sealed class SpawnTarget
+{
+    public ReferenceObject Root;       // the reference object whose blueprint receives the object
+    public Layers.SceneLayer Layer;    // scene layer for the panels and visibility
+    public Guid FileGuid;              // the blueprint asset that is modified
+    public string Description;
+
+    /// <summary>The layer holding an existing object (the same place copies go).</summary>
+    public static SpawnTarget SameAs(Entity anchor)
+    {
+        if (anchor == null)
+            return null;
+        ReferenceObject root = anchor.FindAncestor<ReferenceObject>();
+        if (root == null)
+            return null;
+        return new SpawnTarget { Root = root, Layer = anchor.Layer, FileGuid = anchor.FileGuid, Description = $"the layer of {anchor.DisplayName}" };
+    }
+
+    /// <summary>The level's own blueprint: always loaded while the level is.</summary>
+    public static SpawnTarget LevelRoot(LevelEditorScreen screen)
+    {
+        Layers.SceneLayer rootLayer = screen?.EditorProvider?.RootLayer;
+        if (!(rootLayer?.Entity is ReferenceObject root) || root.Blueprint == null)
+            return null;
+        return new SpawnTarget { Root = root, Layer = rootLayer, FileGuid = root.Blueprint.FileGuid, Description = $"the level itself ({root.DisplayName}, always loaded)" };
+    }
+}
+
 /// <summary>Result of checking whether a blueprint can be placed into a layer.</summary>
 public sealed class SpawnCheck
 {
@@ -44,7 +73,7 @@ public static class SpawnUtil
         return null;
     }
 
-    public static SpawnCheck Check(EbxAssetEntry blueprint, Entity anchor)
+    public static SpawnCheck Check(EbxAssetEntry blueprint, SpawnTarget target)
     {
         SpawnCheck check = new SpawnCheck();
         if (blueprint == null)
@@ -52,9 +81,9 @@ public static class SpawnUtil
             check.Problem = "Select a blueprint in the data explorer first (e.g. an ObjectBlueprint of a prop).";
             return check;
         }
-        if (anchor == null)
+        if (target == null)
         {
-            check.Problem = "Select an object in the level first; the new object goes into the same layer.";
+            check.Problem = "No place to put it: select an object in the level (for 'same layer'), or open a level (for 'level root').";
             return check;
         }
         check.ReferenceType = ReferenceTypeFor(blueprint.Type);
@@ -69,19 +98,19 @@ public static class SpawnUtil
             return check;
         }
 
-        EbxAssetEntry target = App.AssetManager.GetEbxEntry(anchor.FileGuid);
-        if (target == null)
+        EbxAssetEntry targetEntry = App.AssetManager.GetEbxEntry(target.FileGuid);
+        if (targetEntry == null)
         {
-            check.Problem = "The selected object's asset was not found.";
+            check.Problem = "The target layer's asset was not found.";
             return check;
         }
-        check.TargetAsset = target.Name;
+        check.TargetAsset = targetEntry.Name;
 
         // Heuristic: the game loads an asset when a bundle containing it is loaded. If the
         // blueprint shares no bundle with the target layer or the sub-worlds above it, it may
         // not be loaded where it is placed (invisible / missing in game).
-        HashSet<int> loaded = new HashSet<int>(target.EnumerateBundles());
-        for (Entity p = anchor.Parent; p != null; p = p.Parent)
+        HashSet<int> loaded = new HashSet<int>(targetEntry.EnumerateBundles());
+        for (Entity p = target.Root; p != null; p = p.Parent)
         {
             if (p is ReferenceObject reference && reference.Blueprint != null)
             {
@@ -104,9 +133,9 @@ public static class SpawnUtil
     /// Creates the reference object at the camera, its entity and render proxies, network
     /// registry entries, and an undo step. Returns the new entity.
     /// </summary>
-    public static Entity Spawn(EbxAssetEntry blueprint, Entity anchor, LevelEditorScreen screen)
+    public static Entity Spawn(EbxAssetEntry blueprint, SpawnTarget target, LevelEditorScreen screen)
     {
-        SpawnCheck check = Check(blueprint, anchor);
+        SpawnCheck check = Check(blueprint, target);
         if (!check.CanSpawn)
             throw new InvalidOperationException(check.Problem);
 
@@ -116,8 +145,10 @@ public static class SpawnUtil
 
         using PerfProbe probe = PerfProbe.Start("Spawn", $"place {blueprint.Name}");
 
-        EbxAssetEntry targetEntry = App.AssetManager.GetEbxEntry(anchor.FileGuid);
-        EbxAsset targetAsset = LoadedAssetManager.Instance.GetEbxAsset(anchor.FileGuid);
+        EbxAssetEntry targetEntry = App.AssetManager.GetEbxEntry(target.FileGuid);
+        EbxAsset targetAsset = LoadedAssetManager.Instance.GetEbxAsset(target.FileGuid);
+        if (targetAsset == null)
+            throw new InvalidOperationException($"{targetEntry.Name} is not loaded in the editor.");
         dynamic root = targetAsset.RootObject;
 
         EbxAsset blueprintAsset = App.AssetManager.GetEbx(blueprint);
@@ -166,10 +197,10 @@ public static class SpawnUtil
         }
         probe.Phase("network registries");
 
-        ReferenceObject layerRoot = anchor.FindAncestor<ReferenceObject>();
+        ReferenceObject layerRoot = target.Root;
         Entity entity = layerRoot.MyCreateEntity((GameObjectData)newRef.Internal);
-        if (anchor.Layer != null)
-            anchor.Layer.AddEntity(entity);
+        if (target.Layer != null)
+            target.Layer.AddEntity(entity);
         screen.AddEntity(entity);
         layerRoot.AddNewEntity(entity);
         probe.Phase("entity + render proxies");

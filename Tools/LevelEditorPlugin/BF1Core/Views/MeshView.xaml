@@ -349,8 +349,26 @@
                         Text="Place an asset at the camera" />
                     <TextBlock
                         Margin="3,0,3,3"
-                        Text="Goes into the same layer as the selected object. Pick an ObjectBlueprint / prefab in the data explorer, or one from the list."
+                        Text="Pick an ObjectBlueprint / prefab in the data explorer, or one from the list."
                         TextWrapping="Wrap" />
+                    <WrapPanel Margin="3">
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            Text="Put it in:" />
+                        <RadioButton
+                            x:Name="RadioButton_SpawnIntoSelectedLayer"
+                            Margin="0,0,8,0"
+                            Content="Layer of selected object"
+                            GroupName="SpawnTarget"
+                            IsChecked="True"
+                            ToolTip="Same place copies go. If that layer is zone streamed, the object only exists in game while the player is near it." />
+                        <RadioButton
+                            x:Name="RadioButton_SpawnIntoLevelRoot"
+                            Content="Level root (always loaded)"
+                            GroupName="SpawnTarget"
+                            ToolTip="The level's own blueprint, loaded the whole time the level is: use for things that must exist everywhere, like long bridges. Needs no selection." />
+                    </WrapPanel>
                     <DockPanel Margin="3">
                         <TextBlock
                             Width="70"

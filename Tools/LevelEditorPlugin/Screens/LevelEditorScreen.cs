@@ -428,6 +428,12 @@ public class LevelEditorScreen : DeferredRenderScreen2
     // @hack: so that entities have access to the camera. Primarily for sprites
     public static LevelEditorCamera EditorCamera { get; private set; }
 
+    /// <summary>
+    /// The level editor screen last created or used (for tools outside the editor tab, like the
+    /// BF1 window, which otherwise only learned the screen from a selection).
+    /// </summary>
+    public static LevelEditorScreen Active { get; set; }
+
     private List<MeshRenderInstance> sprites = [];
 
     private Queue<RenderAction> renderTasks = new Queue<RenderAction>();
@@ -777,6 +783,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
         {
             camera = new LevelEditorCamera();
             camera.SetViewParams(new Vector3(0, 0, 0), new Vector3(0, 0, 0));
+            Active = this;
 
             SetCamera();
         }

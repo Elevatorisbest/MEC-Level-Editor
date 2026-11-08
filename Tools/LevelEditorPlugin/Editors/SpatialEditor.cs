@@ -89,8 +89,14 @@ public class SpatialEditor : ToolbarAssetEditor, IEditorProvider
 
         // edits made in this editor go into this editor's history even if another asset tab was
         // opened or closed in between
-        PreviewMouseDown += (s, e) => MakeUndoCurrent();
-        PreviewKeyDown += (s, e) => MakeUndoCurrent();
+        PreviewMouseDown += (s, e) => { MakeUndoCurrent(); MakeScreenActive(); };
+        PreviewKeyDown += (s, e) => { MakeUndoCurrent(); MakeScreenActive(); };
+    }
+
+    private void MakeScreenActive()
+    {
+        if (screen != null)
+            LevelEditorScreen.Active = screen;
     }
 
     private bool editInProgress;
