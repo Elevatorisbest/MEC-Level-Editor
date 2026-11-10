@@ -588,15 +588,28 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
     private static bool BelongsTo(Entity candidate, Entity root)
     {
-        for (Entity e = candidate; e != null; e = e.Owner)
+        // Owner chains can loop back on themselves (the render thread hung here forever when
+        // deleting a placed prop), so walk each chain a bounded number of steps and stop at a
+        // repeat.
+        Entity e = candidate;
+        for (int i = 0; e != null && i < 64; i++)
         {
             if (e == root)
                 return true;
+            Entity next = e.Owner;
+            if (next == e)
+                break;
+            e = next;
         }
-        for (Entity e = candidate; e != null; e = e.Parent)
+        e = candidate;
+        for (int i = 0; e != null && i < 64; i++)
         {
             if (e == root)
                 return true;
+            Entity next = e.Parent;
+            if (next == e)
+                break;
+            e = next;
         }
         return false;
     }
