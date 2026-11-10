@@ -13,6 +13,81 @@
     ResizeMode="CanResize"
     WindowStartupLocation="CenterScreen">
 
+    <ctrl:FrostyDockableWindow.Resources>
+        <!--
+            Frosty's own checkbox, with light text: the default control style sets black text,
+            which overrides the light colour the window sets for everything else.
+        -->
+        <Style BasedOn="{StaticResource {x:Type CheckBox}}" TargetType="{x:Type CheckBox}">
+            <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+            <Setter Property="Padding" Value="5,0,0,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!--
+            Choices are drawn as segmented buttons: a row (or column) of joined buttons, the chosen
+            one highlighted. Neighbours overlap by one pixel so their borders join; the chosen and
+            hovered ones are drawn on top so their border shows completely.
+        -->
+        <Style TargetType="{x:Type RadioButton}">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Foreground" Value="#B8B8B8" />
+            <Setter Property="Background" Value="#262626" />
+            <Setter Property="BorderBrush" Value="#454545" />
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RadioButton}">
+                        <Border
+                            x:Name="segment"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1">
+                            <Grid>
+                                <ContentPresenter
+                                    x:Name="contentPresenter"
+                                    Margin="{TemplateBinding Padding}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                    Focusable="False"
+                                    RecognizesAccessKey="True" />
+                                <!--  accent bar under the chosen segment  -->
+                                <Rectangle
+                                    x:Name="accent"
+                                    Height="2"
+                                    VerticalAlignment="Bottom"
+                                    Fill="{StaticResource SubMenuItemHighlight}"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#333333" />
+                                <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+                                <Setter Property="Panel.ZIndex" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="{StaticResource ControlBackground}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource ControlHighlight}" />
+                                <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+                                <Setter Property="Panel.ZIndex" Value="2" />
+                                <Setter TargetName="accent" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="contentPresenter" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ctrl:FrostyDockableWindow.Resources>
+
     <Grid Background="#141414" TextElement.Foreground="#F8F8F8">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="220" />
@@ -49,31 +124,33 @@
                     Content="Clear"
                     DockPanel.Dock="Left" />
 
-                <RadioButton
-                    x:Name="Radio_ViewAll"
-                    Margin="0,0,10,0"
-                    VerticalAlignment="Center"
-                    Checked="View_Changed"
-                    Content="All assets"
-                    DockPanel.Dock="Left"
-                    GroupName="BrowserView"
-                    IsChecked="True" />
-                <RadioButton
-                    x:Name="Radio_ViewFavourites"
-                    Margin="0,0,10,0"
-                    VerticalAlignment="Center"
-                    Checked="View_Changed"
-                    Content="&#x2605; Favourites"
-                    DockPanel.Dock="Left"
-                    GroupName="BrowserView" />
-                <RadioButton
-                    x:Name="Radio_ViewRecent"
+                <StackPanel
                     Margin="0,0,18,0"
                     VerticalAlignment="Center"
-                    Checked="View_Changed"
-                    Content="Recently placed"
                     DockPanel.Dock="Left"
-                    GroupName="BrowserView" />
+                    Orientation="Horizontal">
+                    <RadioButton
+                        x:Name="Radio_ViewAll"
+                        Checked="View_Changed"
+                        Content="All assets"
+                        GroupName="BrowserView"
+                        IsChecked="True"
+                        ToolTip="Every placeable asset, by folder" />
+                    <RadioButton
+                        x:Name="Radio_ViewFavourites"
+                        Margin="-1,0,0,0"
+                        Checked="View_Changed"
+                        Content="&#x2605; Favourites"
+                        GroupName="BrowserView"
+                        ToolTip="Assets you marked with the Favourite button" />
+                    <RadioButton
+                        x:Name="Radio_ViewRecent"
+                        Margin="-1,0,0,0"
+                        Checked="View_Changed"
+                        Content="Recently placed"
+                        GroupName="BrowserView"
+                        ToolTip="The last assets you placed, newest first" />
+                </StackPanel>
 
                 <CheckBox
                     x:Name="CheckBox_Objects"
@@ -347,14 +424,16 @@
                     Text="Place in the level" />
                 <RadioButton
                     x:Name="Radio_TargetLayer"
-                    Margin="0,2"
+                    Margin="0,2,0,0"
+                    HorizontalContentAlignment="Left"
                     Content="Into the layer of the selected object"
                     GroupName="BrowserSpawnTarget"
                     IsChecked="True"
                     ToolTip="Same place copies go. If that layer is zone streamed, the object only exists in game while the player is near it." />
                 <RadioButton
                     x:Name="Radio_TargetRoot"
-                    Margin="0,2"
+                    Margin="0,-1,0,0"
+                    HorizontalContentAlignment="Left"
                     Content="Into the level root (always loaded)"
                     GroupName="BrowserSpawnTarget"
                     ToolTip="The level's own blueprint, loaded the whole time the level is. Needs no selection." />
@@ -480,7 +559,6 @@
                         Text="Stored size:" />
                     <RadioButton
                         x:Name="Radio_Stored128"
-                        Margin="0,0,10,0"
                         VerticalAlignment="Center"
                         Click="StoredSize_Click"
                         Content="128 px"
@@ -488,6 +566,7 @@
                         ToolTip="About a quarter of the disk space of 256 px. Each size has its own cache file." />
                     <RadioButton
                         x:Name="Radio_Stored256"
+                        Margin="-1,0,0,0"
                         VerticalAlignment="Center"
                         Click="StoredSize_Click"
                         Content="256 px"
