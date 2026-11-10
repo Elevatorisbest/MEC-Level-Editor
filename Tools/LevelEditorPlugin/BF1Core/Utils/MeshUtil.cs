@@ -374,7 +374,8 @@ public static class MeshUtil
         EntityDeletion.Deselect(option.LevelEditorScreen);
         DeletedEntity record = EntityDeletion.Delete(option.Entity, option.LevelEditorScreen);
         probe.Phase("delete object, connections, references");
-        EntityDeletion.CommitEdit(new DeleteEntitiesUndoUnit(new List<DeletedEntity> { record }, option.LevelEditorScreen));
+        if (record != null)
+            EntityDeletion.CommitEdit(new DeleteEntitiesUndoUnit(new List<DeletedEntity> { record }, option.LevelEditorScreen));
         await Task.Yield();
 
         RaiseLayerReloaded(probe);

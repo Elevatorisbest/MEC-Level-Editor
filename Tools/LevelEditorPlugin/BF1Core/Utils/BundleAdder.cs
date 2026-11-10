@@ -1,4 +1,5 @@
 using Frosty.Core;
+using FrostySdk;
 using FrostySdk.Ebx;
 using FrostySdk.IO;
 using FrostySdk.Managers.Entries;
@@ -27,9 +28,10 @@ public static class BundleAdder
     public sealed class Result
     {
         public string Bundle;
-        public int Ebx, Res, Chunks, AlreadyLoaded;
+        public int Ebx, Res, Chunks, AlreadyLoaded, VariationEntries;
+        public string VariationNote;
         public bool HitLimit;
-        public override string ToString() => $"[{LevelNames[Level]}] added {Ebx} asset(s), {Res} resource(s), {Chunks} chunk(s) to {Bundle} ({AlreadyLoaded} dependencies were already loaded there){(HitLimit ? " - stopped at the size limit" : "")}";
+        public override string ToString() => $"[{LevelNames[Level]}] added {Ebx} asset(s), {Res} resource(s), {Chunks} chunk(s), {VariationEntries} mesh variation entr(ies){(VariationNote != null ? $" ({VariationNote})" : "")} to {Bundle} ({AlreadyLoaded} dependencies were already loaded there){(HitLimit ? " - stopped at the size limit" : "")}";
     }
 
     private const int MaxEbx = 1500;
@@ -102,6 +104,7 @@ public static class BundleAdder
 
         HashSet<Guid> visited = new HashSet<Guid>();
         HashSet<ulong> visitedRes = new HashSet<ulong>();
+        List<EbxAssetEntry> addedMeshes = new List<EbxAssetEntry>();
         Queue<EbxAssetEntry> queue = new Queue<EbxAssetEntry>();
         queue.Enqueue(asset);
 
@@ -124,7 +127,11 @@ public static class BundleAdder
             if (Level < 1)
                 break;
             if (entry.AddToBundle(targetBundle))
+            {
                 result.Ebx++;
+                if (TypeLibrary.IsSubClassOf(entry.Type, "MeshAsset"))
+                    addedMeshes.Add(entry);
+            }
             if (Level < 2)
             {
                 foreach (Guid dependency in entry.EnumerateDependencies())
@@ -162,8 +169,70 @@ public static class BundleAdder
             }
         }
 
+        // Meshes are drawn with the materials listed for them in the mesh variation database of a
+        // loaded bundle. A mesh moved into a bundle without its entry has no materials there.
+        if (Level >= 2)
+        {
+            foreach (EbxAssetEntry mesh in addedMeshes)
+                CopyVariationEntries(mesh, targetBundle, result);
+        }
+
         LevelEditorLog.Info("Bundles", $"{asset.Name}: {result}");
         return result;
+    }
+
+    private static EbxAssetEntry VariationDatabaseOf(int bundle)
+    {
+        BundleEntry entry = App.AssetManager.GetBundleEntry(bundle);
+        return entry == null ? null : App.AssetManager.EnumerateEbx(entry).FirstOrDefault(e => e.Type == "MeshVariationDatabase");
+    }
+
+    private static Guid MeshOf(object variationEntry)
+    {
+        try
+        {
+            PointerRef mesh = (PointerRef)variationEntry.GetType().GetProperty("Mesh").GetValue(variationEntry);
+            return mesh.Type == PointerRefType.External ? mesh.External.FileGuid : Guid.Empty;
+        }
+        catch (Exception)
+        {
+            return Guid.Empty;
+        }
+    }
+
+    /// <summary>Copies the mesh's entries from a variation database of its original bundles.</summary>
+    private static void CopyVariationEntries(EbxAssetEntry mesh, int targetBundle, Result result)
+    {
+        EbxAssetEntry targetDbEntry = VariationDatabaseOf(targetBundle);
+        if (targetDbEntry == null)
+        {
+            result.VariationNote = "target bundle has no mesh variation database";
+            return;
+        }
+        EbxAsset targetDb = App.AssetManager.GetEbx(targetDbEntry);
+        IList targetEntries = (IList)((dynamic)targetDb.RootObject).Entries;
+        if (targetEntries.Cast<object>().Any(v => MeshOf(v) == mesh.Guid))
+            return; // already there
+
+        foreach (int bundle in mesh.Bundles)
+        {
+            EbxAssetEntry sourceDbEntry = VariationDatabaseOf(bundle);
+            if (sourceDbEntry == null || sourceDbEntry == targetDbEntry)
+                continue;
+            EbxAsset sourceDb = App.AssetManager.GetEbx(sourceDbEntry);
+            List<object> found = ((IList)((dynamic)sourceDb.RootObject).Entries).Cast<object>().Where(v => MeshOf(v) == mesh.Guid).ToList();
+            if (found.Count == 0)
+                continue;
+
+            foreach (object variation in found)
+                targetEntries.Add(variation); // struct: a copy; its references are to other assets
+            targetDb.Update();
+            App.AssetManager.ModifyEbx(targetDbEntry.Name, targetDb);
+            result.VariationEntries += found.Count;
+            result.VariationNote = $"from {sourceDbEntry.Name} into {targetDbEntry.Name}";
+            return;
+        }
+        result.VariationNote = $"no variation database entry found for {mesh.Name}";
     }
 
     private static void AddRes(ResAssetEntry res, int bundle, HashSet<int> available, HashSet<ulong> visited, Result result)

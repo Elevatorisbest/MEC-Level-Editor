@@ -586,11 +586,28 @@ public class LevelEditorScreen : DeferredRenderScreen2
         });
     }
 
+    private static bool BelongsTo(Entity candidate, Entity root)
+    {
+        for (Entity e = candidate; e != null; e = e.Owner)
+        {
+            if (e == root)
+                return true;
+        }
+        for (Entity e = candidate; e != null; e = e.Parent)
+        {
+            if (e == root)
+                return true;
+        }
+        return false;
+    }
+
     public void DeleteEntityFromRenderProxy(Entity entity)
     {
         renderTasks.Enqueue(state =>
         {
-            var foundProxies = proxies.Where(rp => rp.OwnerEntity.Owner == entity).ToList();
+            // every proxy that belongs to the entity at any depth (a placed prop's mesh entity sits
+            // inside its blueprint, one or more levels below the placed reference object)
+            var foundProxies = proxies.Where(rp => BelongsTo(rp.OwnerEntity, entity)).ToList();
             if (foundProxies == null)
                 return;
 

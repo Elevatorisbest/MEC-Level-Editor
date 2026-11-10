@@ -131,7 +131,15 @@ public static class EntityDeletion
             }
         }
         if (rootIndex < 0)
-            throw new Exception($"{entity.DisplayName} was not found in the Objects list of {entry.Name}");
+        {
+            // Already gone from the asset (e.g. deleted before, but something of it was still
+            // shown). Clear what is left in the view and layers instead of failing.
+            screen.DeleteEntityFromRenderProxy(entity);
+            entity.FindAncestor<ReferenceObject>()?.DeleteEntity(entity);
+            entity.Layer?.Entities.Remove(entity);
+            LevelEditorLog.Warning("Delete", $"{entity.DisplayName} was no longer in {entry.Name}; removed what was left of it from the view");
+            return null;
+        }
 
         PointerRef rootRef = (PointerRef)rootList[rootIndex];
         object target = rootRef.Internal;
@@ -206,6 +214,8 @@ public static class EntityDeletion
     /// <summary>Puts back everything <see cref="Delete"/> removed.</summary>
     public static void Restore(DeletedEntity record)
     {
+        if (record == null)
+            return;
         EbxAsset asset = record.Asset;
         foreach (object obj in record.RemovedObjects)
             asset.AddObject(obj);
