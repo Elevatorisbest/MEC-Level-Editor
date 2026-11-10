@@ -2,7 +2,7 @@
 
 ## Automatic build (GitHub Actions), no local Visual Studio needed
 
-Every push to `dev` that changes code runs `.github/workflows/build.yml` on a GitHub Windows
+Every push to `dev` or `assetbrowser` that changes code runs `.github/workflows/build.yml` on a GitHub Windows
 Server 2022 runner (Visual Studio 2022). You can also start it by hand: GitHub → Actions → Build →
 "Run workflow".
 

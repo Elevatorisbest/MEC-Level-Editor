@@ -16,6 +16,12 @@ public partial class MainWindow : Window
     /// </summary>
     public static MainWindow WinInstance { get; private set; } = null;
 
+    /// <summary>The object selected in the level view (null when nothing is), for other windows such as the asset browser.</summary>
+    public static Entity SelectedEntity { get; private set; }
+
+    /// <summary>The level view the selection was last made or cleared in.</summary>
+    public static LevelEditorScreen SelectedScreen { get; private set; }
+
     /// <summary>
     /// Constructor
     /// </summary>
@@ -60,6 +66,9 @@ public partial class MainWindow : Window
     /// </summary>
     public static void UpdateSelectedEntity(Entity entity, LevelEditorScreen screen)
     {
+        SelectedEntity = entity;
+        SelectedScreen = screen;
+
         if (WinInstance == null)
             return;
 

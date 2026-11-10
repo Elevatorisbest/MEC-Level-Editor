@@ -332,6 +332,8 @@ public partial class MeshView : UserControl
 
     private void Button_PlaceAsset_Click(object sender, RoutedEventArgs e) => Place(pickedAsset);
 
+    private void Button_OpenAssetBrowser_Click(object sender, RoutedEventArgs e) => AssetBrowser.AssetBrowserWindow.ShowBrowser();
+
     private void ComboBox_BundleMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (ComboBox_BundleMode.SelectedIndex >= 0)
