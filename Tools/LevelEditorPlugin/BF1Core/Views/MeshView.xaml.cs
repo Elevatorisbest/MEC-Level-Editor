@@ -332,6 +332,8 @@ public partial class MeshView : UserControl
 
     private void Button_PlaceAsset_Click(object sender, RoutedEventArgs e) => Place(pickedAsset);
 
+    private void Button_OpenAssetBrowser_Click(object sender, RoutedEventArgs e) => AssetBrowser.AssetBrowserWindow.ShowBrowser();
+
     private void ComboBox_BundleMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (ComboBox_BundleMode.SelectedIndex >= 0)
@@ -371,7 +373,24 @@ public partial class MeshView : UserControl
         }
         if (check.BundleWarning == null)
         {
-            ShowSpawnStatus($"{blueprint.Filename} is already in a bundle loaded there; nothing to do.");
+            // made available earlier: add what that missed (textures used by a mesh variation entry)
+            if (BundleAdder.Level < 1)
+            {
+                ShowSpawnStatus($"{blueprint.Filename} is already in a bundle loaded there. Choose a Bundles test level to check it for missing parts.");
+                return;
+            }
+            try
+            {
+                string completed = SpawnUtil.CompleteEarlierAddition(blueprint, check);
+                ShowSpawnStatus(completed == null
+                    ? $"{blueprint.Filename} is already in a bundle loaded there; nothing to do."
+                    : "Checked the earlier addition: " + completed);
+            }
+            catch (Exception ex)
+            {
+                ShowSpawnStatus("Failed: " + ex.Message);
+                LevelEditorLog.Error("Bundles", $"Completing {blueprint.Name} failed", ex);
+            }
             return;
         }
         try

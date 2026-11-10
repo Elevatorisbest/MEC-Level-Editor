@@ -1,0 +1,645 @@
+<ctrl:FrostyDockableWindow
+    x:Class="LevelEditorPlugin.AssetBrowser.AssetBrowserWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctrl="clr-namespace:Frosty.Controls;assembly=FrostyControls"
+    Title="Asset Browser"
+    Width="1240"
+    Height="780"
+    MinWidth="820"
+    MinHeight="520"
+    Closing="Window_Closing"
+    IsVisibleChanged="Window_IsVisibleChanged"
+    ResizeMode="CanResize"
+    WindowStartupLocation="CenterScreen">
+
+    <ctrl:FrostyDockableWindow.Resources>
+        <!--
+            Frosty's own checkbox, with light text: the default control style sets black text,
+            which overrides the light colour the window sets for everything else.
+        -->
+        <Style BasedOn="{StaticResource {x:Type CheckBox}}" TargetType="{x:Type CheckBox}">
+            <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+            <Setter Property="Padding" Value="5,0,0,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!--
+            Choices are drawn as segmented buttons: a row (or column) of joined buttons, the chosen
+            one highlighted. Neighbours overlap by one pixel so their borders join; the chosen and
+            hovered ones are drawn on top so their border shows completely.
+        -->
+        <Style TargetType="{x:Type RadioButton}">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Foreground" Value="#B8B8B8" />
+            <Setter Property="Background" Value="#262626" />
+            <Setter Property="BorderBrush" Value="#454545" />
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RadioButton}">
+                        <Border
+                            x:Name="segment"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1">
+                            <Grid>
+                                <ContentPresenter
+                                    x:Name="contentPresenter"
+                                    Margin="{TemplateBinding Padding}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                    Focusable="False"
+                                    RecognizesAccessKey="True" />
+                                <!--  accent bar under the chosen segment  -->
+                                <Rectangle
+                                    x:Name="accent"
+                                    Height="2"
+                                    VerticalAlignment="Bottom"
+                                    Fill="{StaticResource SubMenuItemHighlight}"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#333333" />
+                                <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+                                <Setter Property="Panel.ZIndex" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="{StaticResource ControlBackground}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource ControlHighlight}" />
+                                <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+                                <Setter Property="Panel.ZIndex" Value="2" />
+                                <Setter TargetName="accent" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="contentPresenter" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ctrl:FrostyDockableWindow.Resources>
+
+    <Grid Background="#141414" TextElement.Foreground="#F8F8F8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="350" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--  Search and filters  -->
+        <Border
+            Grid.Row="0"
+            Grid.ColumnSpan="3"
+            Padding="6"
+            Background="#202020">
+            <DockPanel LastChildFill="False">
+                <ctrl:FrostyWatermarkTextBox
+                    x:Name="TextBox_Search"
+                    Width="300"
+                    Height="24"
+                    VerticalContentAlignment="Center"
+                    DockPanel.Dock="Left"
+                    TextChanged="TextBox_Search_TextChanged"
+                    ToolTip="Words from the asset's name or path, e.g. 'statue anc'. All words have to match. Searches the folder shown on the left and everything below it."
+                    WatermarkText="Search by name or path" />
+                <Button
+                    x:Name="Button_ClearSearch"
+                    Margin="4,0,12,0"
+                    Padding="8,0"
+                    Click="Button_ClearSearch_Click"
+                    Content="Clear"
+                    DockPanel.Dock="Left" />
+
+                <StackPanel
+                    Margin="0,0,18,0"
+                    VerticalAlignment="Center"
+                    DockPanel.Dock="Left"
+                    Orientation="Horizontal">
+                    <RadioButton
+                        x:Name="Radio_ViewAll"
+                        Checked="View_Changed"
+                        Content="All assets"
+                        GroupName="BrowserView"
+                        IsChecked="True"
+                        ToolTip="Every placeable asset, by folder" />
+                    <RadioButton
+                        x:Name="Radio_ViewFavourites"
+                        Margin="-1,0,0,0"
+                        Checked="View_Changed"
+                        Content="&#x2605; Favourites"
+                        GroupName="BrowserView"
+                        ToolTip="Assets you marked with the Favourite button" />
+                    <RadioButton
+                        x:Name="Radio_ViewRecent"
+                        Margin="-1,0,0,0"
+                        Checked="View_Changed"
+                        Content="Recently placed"
+                        GroupName="BrowserView"
+                        ToolTip="The last assets you placed, newest first" />
+                </StackPanel>
+
+                <CheckBox
+                    x:Name="CheckBox_Objects"
+                    Margin="0,0,10,0"
+                    VerticalAlignment="Center"
+                    Click="Filter_Changed"
+                    Content="Objects"
+                    DockPanel.Dock="Left"
+                    IsChecked="True"
+                    ToolTip="ObjectBlueprint assets: a single object, usually one prop." />
+                <CheckBox
+                    x:Name="CheckBox_Prefabs"
+                    Margin="0,0,10,0"
+                    VerticalAlignment="Center"
+                    Click="Filter_Changed"
+                    Content="Prefabs"
+                    DockPanel.Dock="Left"
+                    IsChecked="True"
+                    ToolTip="PrefabBlueprint assets: several objects placed together." />
+                <CheckBox
+                    x:Name="CheckBox_HideNoMesh"
+                    Margin="0,0,10,0"
+                    VerticalAlignment="Center"
+                    Click="Filter_Changed"
+                    Content="Hide assets without a mesh"
+                    DockPanel.Dock="Left"
+                    ToolTip="Hides assets whose thumbnail run found nothing to draw (logic, effects, sound). Assets that have not been looked at yet stay listed." />
+
+                <Slider
+                    x:Name="Slider_TileSize"
+                    Width="130"
+                    VerticalAlignment="Center"
+                    DockPanel.Dock="Right"
+                    IsSnapToTickEnabled="True"
+                    Maximum="256"
+                    Minimum="72"
+                    TickFrequency="8"
+                    ToolTip="Thumbnail size in the list"
+                    ValueChanged="Slider_TileSize_ValueChanged" />
+                <TextBlock
+                    Margin="0,0,6,0"
+                    VerticalAlignment="Center"
+                    DockPanel.Dock="Right"
+                    Text="Size" />
+            </DockPanel>
+        </Border>
+
+        <!--  Folders  -->
+        <DockPanel
+            Grid.Row="1"
+            Grid.Column="0"
+            Margin="6,6,3,6">
+            <TextBlock
+                Margin="2,0,0,4"
+                DockPanel.Dock="Top"
+                FontWeight="Bold"
+                Text="Folder" />
+            <TextBlock
+                x:Name="TextBlock_Folder"
+                Margin="2,0,0,4"
+                DockPanel.Dock="Top"
+                Foreground="#C0C0C0"
+                Text="(all folders)"
+                TextWrapping="Wrap" />
+            <StackPanel
+                Margin="0,0,0,4"
+                DockPanel.Dock="Top"
+                Orientation="Horizontal">
+                <Button
+                    x:Name="Button_FolderUp"
+                    Margin="0,0,4,0"
+                    Padding="8,2"
+                    Click="Button_FolderUp_Click"
+                    Content="Up one level" />
+                <Button
+                    x:Name="Button_FolderRoot"
+                    Padding="8,2"
+                    Click="Button_FolderRoot_Click"
+                    Content="All folders" />
+            </StackPanel>
+            <ListBox
+                x:Name="ListBox_Folders"
+                DisplayMemberPath="Label"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                SelectionChanged="ListBox_Folders_SelectionChanged"
+                VirtualizingPanel.IsVirtualizing="True" />
+        </DockPanel>
+
+        <!--  Thumbnails. One list item is a whole row of tiles, so the built-in row virtualization applies: only the rows on screen exist.  -->
+        <Grid
+            Grid.Row="1"
+            Grid.Column="1"
+            Margin="3,6,3,6"
+            Background="#1C1C1C">
+            <ItemsControl
+                x:Name="Items_Rows"
+                Focusable="False"
+                ScrollViewer.CanContentScroll="True"
+                SizeChanged="Items_Rows_SizeChanged"
+                VirtualizingPanel.IsVirtualizing="True"
+                VirtualizingPanel.ScrollUnit="Pixel"
+                VirtualizingPanel.VirtualizationMode="Recycling">
+                <ItemsControl.Template>
+                    <ControlTemplate TargetType="{x:Type ItemsControl}">
+                        <ScrollViewer
+                            CanContentScroll="True"
+                            Focusable="False"
+                            HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollBarVisibility="Visible">
+                            <ItemsPresenter />
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ItemsControl.Template>
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <ItemsControl Focusable="False" ItemsSource="{Binding Tiles}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        x:Name="TileBorder"
+                                        Width="{Binding Size}"
+                                        Margin="3"
+                                        Background="#2B2B2B"
+                                        BorderBrush="#2B2B2B"
+                                        BorderThickness="2"
+                                        Cursor="Hand"
+                                        MouseLeftButtonDown="Tile_MouseLeftButtonDown"
+                                        ToolTip="{Binding ToolTip}">
+                                        <StackPanel>
+                                            <Grid Height="{Binding Size}" Background="#232323">
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Foreground="#808080"
+                                                    Text="{Binding StatusText}" />
+                                                <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
+                                                <TextBlock
+                                                    Margin="0,2,5,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    FontSize="15"
+                                                    Foreground="#FEDB1D"
+                                                    Text="{Binding StarText}" />
+                                                <TextBlock
+                                                    Margin="5,3,0,0"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Top"
+                                                    FontSize="10"
+                                                    Foreground="#B0B0B0"
+                                                    Text="{Binding KindText}" />
+                                            </Grid>
+                                            <TextBlock
+                                                Margin="4,2,4,3"
+                                                FontSize="11"
+                                                Text="{Binding Name}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter TargetName="TileBorder" Property="BorderBrush" Value="#FEDB1D" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock
+                x:Name="TextBlock_ListMessage"
+                Margin="20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Foreground="#A0A0A0"
+                IsHitTestVisible="False"
+                Text="Listing the game's blueprints..."
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+        </Grid>
+
+        <!--  Details, preview and thumbnail generation  -->
+        <ScrollViewer
+            Grid.Row="1"
+            Grid.Column="2"
+            Margin="3,6,6,6"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,6,0">
+
+                <Border
+                    x:Name="Border_Preview"
+                    Width="320"
+                    Height="320"
+                    HorizontalAlignment="Left"
+                    Background="#232323"
+                    Cursor="SizeAll"
+                    MouseLeftButtonDown="Preview_MouseLeftButtonDown"
+                    MouseLeftButtonUp="Preview_MouseLeftButtonUp"
+                    MouseMove="Preview_MouseMove"
+                    MouseWheel="Preview_MouseWheel"
+                    ToolTip="Drag to turn the asset, mouse wheel to zoom, double-click to reset the view.">
+                    <Grid>
+                        <Image x:Name="Image_Preview" Stretch="Uniform" />
+                        <TextBlock
+                            x:Name="TextBlock_PreviewMessage"
+                            Margin="16"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Foreground="#A0A0A0"
+                            IsHitTestVisible="False"
+                            Text="Click an asset to see it here."
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Margin="6,4,0,0"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            FontSize="10"
+                            Foreground="#E06060"
+                            IsHitTestVisible="False"
+                            Text="Approximate preview (editor shader, not the game's)" />
+                        <TextBlock
+                            x:Name="TextBlock_PreviewSize"
+                            Margin="6,0,0,5"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            FontSize="11"
+                            Foreground="#80E0FF"
+                            IsHitTestVisible="False"
+                            Text="" />
+                    </Grid>
+                </Border>
+
+                <TextBlock
+                    x:Name="TextBlock_AssetName"
+                    Margin="0,8,0,0"
+                    FontSize="14"
+                    FontWeight="Bold"
+                    Text="(nothing picked)"
+                    TextWrapping="Wrap" />
+                <TextBox
+                    x:Name="TextBox_AssetPath"
+                    Margin="0,3,0,0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Foreground="#C0C0C0"
+                    IsReadOnly="True"
+                    Text=""
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    x:Name="TextBlock_AssetInfo"
+                    Margin="0,3,0,0"
+                    Foreground="#C0C0C0"
+                    Text=""
+                    TextWrapping="Wrap" />
+
+                <TextBlock
+                    Margin="0,12,0,3"
+                    FontWeight="Bold"
+                    Text="Place in the level" />
+                <RadioButton
+                    x:Name="Radio_TargetLayer"
+                    Margin="0,2,0,0"
+                    HorizontalContentAlignment="Left"
+                    Content="Into the layer of the selected object"
+                    GroupName="BrowserSpawnTarget"
+                    IsChecked="True"
+                    ToolTip="Same place copies go. If that layer is zone streamed, the object only exists in game while the player is near it." />
+                <RadioButton
+                    x:Name="Radio_TargetRoot"
+                    Margin="0,-1,0,0"
+                    HorizontalContentAlignment="Left"
+                    Content="Into the level root (always loaded)"
+                    GroupName="BrowserSpawnTarget"
+                    ToolTip="The level's own blueprint, loaded the whole time the level is. Needs no selection." />
+                <DockPanel Margin="0,4,0,0">
+                    <TextBlock
+                        Margin="0,0,6,0"
+                        VerticalAlignment="Center"
+                        DockPanel.Dock="Left"
+                        Text="Bundles:" />
+                    <ComboBox
+                        x:Name="ComboBox_BundleMode"
+                        SelectionChanged="ComboBox_BundleMode_SelectionChanged"
+                        ToolTip="EXPERIMENTAL, same setting as in the tools window. The game only shows assets that are in a bundle loaded at that place. With 'Off' a newly placed asset shows in the editor but may be missing in game." />
+                </DockPanel>
+                <WrapPanel Margin="0,6,0,0">
+                    <Button
+                        x:Name="Button_Place"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_Place_Click"
+                        Content="Place at camera"
+                        Foreground="#FEDB1D"
+                        ToolTip="Also: double-click the asset in the list." />
+                    <Button
+                        x:Name="Button_Favourite"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_Favourite_Click"
+                        Content="&#x2605; Favourite" />
+                    <Button
+                        x:Name="Button_CopyPath"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_CopyPath_Click"
+                        Content="Copy path" />
+                    <Button
+                        x:Name="Button_Redraw"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_Redraw_Click"
+                        Content="Redraw thumbnail"
+                        ToolTip="Draws this asset's thumbnail again and replaces the stored one." />
+                </WrapPanel>
+                <TextBlock
+                    x:Name="TextBlock_PlaceStatus"
+                    Margin="0,2,0,0"
+                    Foreground="Orange"
+                    Text=""
+                    TextWrapping="Wrap" />
+
+                <Border
+                    Height="1"
+                    Margin="0,12,0,8"
+                    Background="#404040" />
+
+                <TextBlock FontWeight="Bold" Text="Thumbnails" />
+                <TextBlock
+                    x:Name="TextBlock_RendererState"
+                    Margin="0,3,0,0"
+                    Foreground="Orange"
+                    Text=""
+                    TextWrapping="Wrap" />
+                <CheckBox
+                    x:Name="CheckBox_OnDemand"
+                    Margin="0,6,0,0"
+                    Click="CheckBox_OnDemand_Click"
+                    Content="Draw missing thumbnails while browsing"
+                    ToolTip="Assets shown in the list get their thumbnail drawn when it is not in the cache yet. Turn off to only show what a generation run has stored." />
+                <WrapPanel Margin="0,6,0,0">
+                    <Button
+                        x:Name="Button_GenerateListed"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_GenerateListed_Click"
+                        Content="Generate for listed assets"
+                        ToolTip="Draws and stores the thumbnails of the assets in the list (current folder, search and filters) that are not in the cache yet." />
+                    <Button
+                        x:Name="Button_GenerateAll"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_GenerateAll_Click"
+                        Content="Generate for all assets"
+                        ToolTip="Draws and stores the thumbnails of every placeable asset of the game that is not in the cache yet. Can be paused and continued later, also after restarting Frosty." />
+                    <Button
+                        x:Name="Button_PauseResume"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_PauseResume_Click"
+                        Content="Pause" />
+                    <Button
+                        x:Name="Button_Stop"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_Stop_Click"
+                        Content="Stop" />
+                </WrapPanel>
+                <ProgressBar
+                    x:Name="Progress_Batch"
+                    Height="10"
+                    Margin="0,2,0,0"
+                    Maximum="1"
+                    Minimum="0" />
+                <TextBlock
+                    x:Name="TextBlock_BatchStatus"
+                    Margin="0,4,0,0"
+                    Foreground="#C0C0C0"
+                    Text=""
+                    TextWrapping="Wrap" />
+
+                <TextBlock
+                    Margin="0,12,0,3"
+                    FontWeight="Bold"
+                    Text="Cache" />
+                <TextBlock
+                    x:Name="TextBlock_CacheInfo"
+                    Foreground="#C0C0C0"
+                    Text=""
+                    TextWrapping="Wrap" />
+                <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                    <TextBlock
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center"
+                        Text="Stored size:" />
+                    <RadioButton
+                        x:Name="Radio_Stored128"
+                        VerticalAlignment="Center"
+                        Click="StoredSize_Click"
+                        Content="128 px"
+                        GroupName="BrowserStoredSize"
+                        ToolTip="About a quarter of the disk space of 256 px. Each size has its own cache file." />
+                    <RadioButton
+                        x:Name="Radio_Stored256"
+                        Margin="-1,0,0,0"
+                        VerticalAlignment="Center"
+                        Click="StoredSize_Click"
+                        Content="256 px"
+                        GroupName="BrowserStoredSize"
+                        ToolTip="Sharper at large list sizes. Each size has its own cache file." />
+                </StackPanel>
+                <CheckBox
+                    x:Name="CheckBox_KeyLight"
+                    Margin="0,6,0,0"
+                    Click="CheckBox_KeyLight_Click"
+                    Content="Key light (a lamp from the upper left)"
+                    ToolTip="Off: only the ambient light probe, like the level view. Thumbnails with and without it are kept in separate cache files." />
+                <DockPanel Margin="0,6,0,0">
+                    <TextBlock
+                        Margin="0,0,6,0"
+                        VerticalAlignment="Center"
+                        DockPanel.Dock="Left"
+                        Text="Size limit (MB):" />
+                    <Button
+                        x:Name="Button_ApplyLimit"
+                        Margin="4,0,0,0"
+                        Padding="8,2"
+                        Click="Button_ApplyLimit_Click"
+                        Content="Apply"
+                        DockPanel.Dock="Right" />
+                    <TextBox
+                        x:Name="TextBox_MaxCache"
+                        VerticalContentAlignment="Center"
+                        ToolTip="The cache file never grows past this. Generation stops when it is reached." />
+                </DockPanel>
+                <TextBlock Margin="0,6,0,2" Text="Cache folder:" />
+                <DockPanel>
+                    <Button
+                        x:Name="Button_ApplyFolder"
+                        Margin="4,0,0,0"
+                        Padding="8,2"
+                        Click="Button_ApplyFolder_Click"
+                        Content="Apply"
+                        DockPanel.Dock="Right" />
+                    <TextBox
+                        x:Name="TextBox_CacheFolder"
+                        VerticalContentAlignment="Center"
+                        ToolTip="Where the thumbnail cache file is kept. Not inside the editor's folder by default, so it survives unpacking a new build. Thumbnails already stored are not moved when this is changed." />
+                </DockPanel>
+                <WrapPanel Margin="0,6,0,0">
+                    <Button
+                        x:Name="Button_OpenFolder"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_OpenFolder_Click"
+                        Content="Open folder" />
+                    <Button
+                        x:Name="Button_ClearCache"
+                        Margin="0,0,6,4"
+                        Padding="10,4"
+                        Click="Button_ClearCache_Click"
+                        Content="Clear cache"
+                        Foreground="OrangeRed"
+                        ToolTip="Deletes all stored thumbnails of this game (every stored size and light setting) and frees the disk space." />
+                </WrapPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  Status line  -->
+        <Border
+            Grid.Row="2"
+            Grid.ColumnSpan="3"
+            Padding="8,4"
+            Background="#202020">
+            <TextBlock
+                x:Name="TextBlock_Status"
+                Foreground="#C0C0C0"
+                Text="" />
+        </Border>
+    </Grid>
+</ctrl:FrostyDockableWindow>

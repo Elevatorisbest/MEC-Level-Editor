@@ -152,6 +152,22 @@ public static class SpawnUtil
             return BundleAdder.AddWithDependencies(blueprint, bundle, check.LoadedBundles).ToString();
     }
 
+    /// <summary>
+    /// For an asset that was already added to the target layer's bundle (so it no longer gets a
+    /// bundle warning): adds what that earlier addition missed, e.g. textures that only a mesh
+    /// variation entry uses. Returns a description, or null when the asset was not added there.
+    /// </summary>
+    public static string CompleteEarlierAddition(EbxAssetEntry blueprint, SpawnCheck check)
+    {
+        if (check.TargetEntry == null)
+            return null;
+        int bundle = BundleAdder.TargetBundle(check.TargetEntry);
+        if (bundle < 0 || !blueprint.AddedBundles.Contains(bundle))
+            return null;
+        using (PerfProbe.Start("Bundles", $"complete {blueprint.Name}"))
+            return BundleAdder.AddWithDependencies(blueprint, bundle, check.LoadedBundles).ToString();
+    }
+
     public static Entity Spawn(EbxAssetEntry blueprint, SpawnTarget target, LevelEditorScreen screen, bool addMissingToBundle, out string bundleNote)
     {
         SpawnCheck check = Check(blueprint, target);

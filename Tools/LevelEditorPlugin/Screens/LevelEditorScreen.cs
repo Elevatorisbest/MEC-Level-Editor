@@ -638,6 +638,12 @@ public class LevelEditorScreen : DeferredRenderScreen2
         RenderMode = LevelEditorRenderingOptions.GetDebugRenderMode();
         BloomEnabled = LevelEditorViewFilter.Bloom;
 
+        // Asset browser thumbnails and preview are drawn here, on this render thread, because the
+        // Direct3D device context may only be used by one thread at a time. At most one asset per
+        // frame; returns at once when nothing is queued. Before base.Update so the anti-aliasing
+        // jitter for this view is computed after the off-screen drawing.
+        AssetBrowser.ThumbnailRenderer.Instance.Pump(this, Viewport.Device);
+
         base.Update(timestep);
 
         // only the active gizmo is shown
@@ -787,6 +793,9 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
     public override void DisposeBuffers()
     {
+        // the asset browser's off-screen renderer was created on this view's device and thread
+        AssetBrowser.ThumbnailRenderer.Instance.Shutdown(this);
+
         base.DisposeBuffers();
 
         translateGizmo.Dispose();

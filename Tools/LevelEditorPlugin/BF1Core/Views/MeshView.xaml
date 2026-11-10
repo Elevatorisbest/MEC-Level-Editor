@@ -347,6 +347,14 @@
                         Margin="3"
                         FontWeight="Bold"
                         Text="Asset browser - place props and prefabs at the camera" />
+                    <Button
+                        x:Name="Button_OpenAssetBrowser"
+                        Margin="3"
+                        HorizontalAlignment="Left"
+                        Click="Button_OpenAssetBrowser_Click"
+                        Content="Open the asset browser (thumbnails, folders, preview)"
+                        Foreground="#FEDB1D"
+                        ToolTip="A separate window with a picture of every placeable asset. Also in the Map menu." />
                     <TextBlock
                         Margin="3,0,3,3"
                         Text="Type part of a name (several words narrow it down), pick a result, then Place (or double-click it). With the search empty the list shows your favourites and recently placed assets."

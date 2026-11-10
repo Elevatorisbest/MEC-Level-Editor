@@ -177,7 +177,11 @@ namespace Frosty.Core.IO
             private int h32;
             private int firstMip;
 
-            public ChunkResource(ChunkAssetEntry entry, Manifest manifest)
+            /// <param name="textureChunks">
+            /// For a chunk that is only added to bundles: the texture it belongs to, when there is
+            /// one (see <see cref="TextureChunkInfo"/>). May be null.
+            /// </param>
+            public ChunkResource(ChunkAssetEntry entry, Manifest manifest, Func<Guid, TextureChunkInfo?> textureChunks = null)
                 : base(entry)
             {
                 name = entry.Id.ToString();
@@ -222,8 +226,32 @@ namespace Frosty.Core.IO
 
                     h32 = entry.H32;
                     firstMip = entry.FirstMip;
+
+                    // A texture chunk added to a bundle without changing it (e.g. a placed prop made
+                    // available in another level) has no H32 or FirstMip here: they are not kept in
+                    // the editor's cache or in the project for unchanged chunks. Without them the new
+                    // bundle lists the texture's data as if it held every mip from 0, with no range
+                    // of the streamed part, and the game fails to create the texture
+                    // (CreateTexture2D: E_INVALIDARG). Fill them in from the texture, the same way
+                    // texture import does (H32 = hash of the texture's name, FirstMip = its
+                    // FirstMip); the mod executor then also writes the chunk's bundled range.
+                    if (entry.AddedBundles.Count > 0 && (h32 == 0 || firstMip == -1) && textureChunks != null)
+                    {
+                        TextureChunkInfo? texture = textureChunks(entry.Id);
+                        if (texture.HasValue)
+                        {
+                            if (h32 == 0)
+                                h32 = texture.Value.H32;
+                            if (firstMip == -1)
+                                firstMip = texture.Value.FirstMip;
+                            FilledFromTexture = true;
+                        }
+                    }
                 }
             }
+
+            /// <summary>True when H32 / FirstMip were taken from the chunk's texture.</summary>
+            public bool FilledFromTexture { get; }
 
             public override void Write(NativeWriter writer)
             {
@@ -236,6 +264,53 @@ namespace Frosty.Core.IO
                 writer.Write(h32);
                 writer.Write(firstMip);
             }
+        }
+
+        /// <summary>What a texture's data chunk needs in a bundle it is added to.</summary>
+        public struct TextureChunkInfo
+        {
+            public int H32;
+            public int FirstMip;
+            public string TextureName;
+        }
+
+        /// <summary>
+        /// Texture data chunks of the textures that are added to bundles in this project, by chunk
+        /// id. Built when the first such chunk is written; reading a texture resource also loads its
+        /// pixel data, so only textures with bundle additions are read.
+        /// </summary>
+        private Dictionary<Guid, TextureChunkInfo> textureChunks;
+
+        private TextureChunkInfo? FindTextureChunk(Guid chunkId)
+        {
+            if (textureChunks == null)
+            {
+                textureChunks = new Dictionary<Guid, TextureChunkInfo>();
+                foreach (ResAssetEntry res in App.AssetManager.EnumerateRes(modifiedOnly: true))
+                {
+                    if (res.ResType != (uint)ResourceType.Texture || res.AddedBundles.Count == 0)
+                        continue;
+                    try
+                    {
+                        using (FrostySdk.Resources.Texture texture = App.AssetManager.GetResAs<FrostySdk.Resources.Texture>(res))
+                        {
+                            if (texture == null || texture.ChunkId == Guid.Empty)
+                                continue;
+                            textureChunks[texture.ChunkId] = new TextureChunkInfo
+                            {
+                                H32 = Fnv1.HashString(res.Name.ToLower()),
+                                FirstMip = texture.FirstMip,
+                                TextureName = res.Name
+                            };
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger.LogWarning("{0}", $"Mod writer: could not read texture {res.Name} for its chunk's bundle data: {ex.Message}");
+                    }
+                }
+            }
+            return textureChunks.TryGetValue(chunkId, out TextureChunkInfo info) ? info : (TextureChunkInfo?)null;
         }
 
         public Manifest ResourceManifest => manifest;
@@ -374,6 +449,7 @@ namespace Frosty.Core.IO
             }
 
             // chunks
+            int texturesFilled = 0;
             foreach (ChunkAssetEntry entry in App.AssetManager.EnumerateChunks(modifiedOnly: true))
             {
                 // chunks dont require custom handlers (except for the special case of Legacy). As chunks should never be modified
@@ -381,9 +457,14 @@ namespace Frosty.Core.IO
 
                 if (entry.IsDirectlyModified)
                 {
-                    AddResource(new ChunkResource(entry, manifest));
+                    ChunkResource chunkResource = new ChunkResource(entry, manifest, FindTextureChunk);
+                    if (chunkResource.FilledFromTexture)
+                        texturesFilled++;
+                    AddResource(chunkResource);
                 }
             }
+            if (texturesFilled > 0)
+                App.Logger.Log("{0}", $"Mod writer: completed the bundle data (H32, first mip) of {texturesFilled} texture chunk(s) added to bundles");
 
             // legacy custom action handler
             ICustomAssetCustomActionHandler tmpHandler = new LegacyCustomActionHandler();
