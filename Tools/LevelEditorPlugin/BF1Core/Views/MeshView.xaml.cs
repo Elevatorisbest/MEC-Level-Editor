@@ -169,6 +169,8 @@ public partial class MeshView : UserControl
 
     private void InitSpawnUi()
     {
+        ComboBox_BundleMode.ItemsSource = BundleAdder.LevelNames;
+        ComboBox_BundleMode.SelectedIndex = BundleAdder.Level;
         searchTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         searchTimer.Tick += (s, e) =>
         {
@@ -314,7 +316,7 @@ public partial class MeshView : UserControl
         }
         try
         {
-            bool addToBundle = CheckBox_AddToBundle.IsChecked == true;
+            bool addToBundle = BundleAdder.Level > 0;
             Entities.Entity placed = SpawnUtil.Spawn(asset, target, screen, addToBundle, out string bundleNote);
             ShowSpawnStatus(bundleNote == null ? null : addToBundle ? "Placed. It was not loaded there, so it was " + bundleNote : "Placed. Warning: " + bundleNote);
             App.NotificationManager.Show($"Placed {asset.Filename} at the camera (Ctrl+Z to undo)");
@@ -329,6 +331,25 @@ public partial class MeshView : UserControl
     }
 
     private void Button_PlaceAsset_Click(object sender, RoutedEventArgs e) => Place(pickedAsset);
+
+    private void ComboBox_BundleMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ComboBox_BundleMode.SelectedIndex >= 0)
+            BundleAdder.Level = ComboBox_BundleMode.SelectedIndex;
+    }
+
+    private void Button_RemoveBundleAdditions_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ShowSpawnStatus("Done: " + BundleAdder.RemoveAllAdditions() + ". Save the project before launching.");
+        }
+        catch (Exception ex)
+        {
+            ShowSpawnStatus("Failed: " + ex.Message);
+            LevelEditorLog.Error("Bundles", "Removing bundle additions failed", ex);
+        }
+    }
 
     /// <summary>
     /// For objects placed before bundles were handled (or copied from elsewhere): adds the

@@ -388,12 +388,23 @@
                             GroupName="SpawnTarget"
                             ToolTip="The level's own blueprint, loaded the whole time the level is: use for things that must exist everywhere, like long bridges. Needs no selection." />
                     </WrapPanel>
-                    <CheckBox
-                        x:Name="CheckBox_AddToBundle"
-                        Margin="3"
-                        Content="Make it load there (add it and what it needs to the layer's bundle)"
-                        IsChecked="True"
-                        ToolTip="The game only loads assets that are in a bundle loaded at that place. Without this, assets taken from another district show in the editor but are missing in game." />
+                    <DockPanel Margin="3">
+                        <TextBlock
+                            Width="70"
+                            VerticalAlignment="Center"
+                            Text="Bundles:" />
+                        <Button
+                            x:Name="Button_RemoveBundleAdditions"
+                            Margin="3,0,0,0"
+                            Click="Button_RemoveBundleAdditions_Click"
+                            Content="Remove all additions"
+                            DockPanel.Dock="Right"
+                            ToolTip="Takes every add-to-bundle out of this project (use if the game freezes while loading). Placed objects stay." />
+                        <ComboBox
+                            x:Name="ComboBox_BundleMode"
+                            SelectionChanged="ComboBox_BundleMode_SelectionChanged"
+                            ToolTip="EXPERIMENTAL. The game only loads assets in a bundle loaded at that place; adding them is what 'make it load there' means. Adding everything froze MEC on the loading screen, so these test levels find out which part the game rejects." />
+                    </DockPanel>
                     <WrapPanel>
                         <Button
                             x:Name="Button_PlaceAsset"

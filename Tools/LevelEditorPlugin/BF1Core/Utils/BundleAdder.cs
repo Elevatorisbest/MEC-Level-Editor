@@ -29,10 +29,49 @@ public static class BundleAdder
         public string Bundle;
         public int Ebx, Res, Chunks, AlreadyLoaded;
         public bool HitLimit;
-        public override string ToString() => $"added {Ebx} asset(s), {Res} resource(s), {Chunks} chunk(s) to {Bundle} ({AlreadyLoaded} dependencies were already loaded there){(HitLimit ? " - stopped at the size limit" : "")}";
+        public override string ToString() => $"[{LevelNames[Level]}] added {Ebx} asset(s), {Res} resource(s), {Chunks} chunk(s) to {Bundle} ({AlreadyLoaded} dependencies were already loaded there){(HitLimit ? " - stopped at the size limit" : "")}";
     }
 
     private const int MaxEbx = 1500;
+
+    /// <summary>
+    /// What gets added (experimental: adding everything made MEC freeze on the loading screen;
+    /// these levels exist to find out which kind of addition the game does not accept).
+    /// 0 = nothing, 1 = assets (ebx) only, 2 = assets + resources, 3 = assets + resources + chunks.
+    /// </summary>
+    public static int Level = 0;
+
+    public static readonly string[] LevelNames =
+    {
+        "Off (object is placed, but may be missing in game)",
+        "Test 1: assets only",
+        "Test 2: assets + resources",
+        "Test 3: assets + resources + data chunks",
+    };
+
+    /// <summary>
+    /// Removes every add-to-bundle in the project (ebx, res, chunks). Used to recover a project
+    /// whose bundle additions break the game. Note: also removes additions made by other tools.
+    /// </summary>
+    public static string RemoveAllAdditions()
+    {
+        int ebx = 0, res = 0, chunks = 0;
+        foreach (EbxAssetEntry e in App.AssetManager.EnumerateEbx(modifiedOnly: true).ToList())
+        {
+            if (e.AddedBundles.Count > 0) { e.AddedBundles.Clear(); e.IsDirty = true; ebx++; }
+        }
+        foreach (ResAssetEntry r in App.AssetManager.EnumerateRes(modifiedOnly: true).ToList())
+        {
+            if (r.AddedBundles.Count > 0) { r.AddedBundles.Clear(); r.IsDirty = true; res++; }
+        }
+        foreach (ChunkAssetEntry c in App.AssetManager.EnumerateChunks(modifiedOnly: true).ToList())
+        {
+            if (c.AddedBundles.Count > 0) { c.AddedBundles.Clear(); c.IsDirty = true; chunks++; }
+        }
+        string text = $"removed bundle additions from {ebx} asset(s), {res} resource(s), {chunks} chunk(s)";
+        LevelEditorLog.Info("Bundles", text);
+        return text;
+    }
 
     /// <summary>The bundle a placed object should be loaded with: the target layer asset's own bundle.</summary>
     public static int TargetBundle(EbxAssetEntry targetLayer)
@@ -82,8 +121,20 @@ public static class BundleAdder
                 break;
             }
 
+            if (Level < 1)
+                break;
             if (entry.AddToBundle(targetBundle))
                 result.Ebx++;
+            if (Level < 2)
+            {
+                foreach (Guid dependency in entry.EnumerateDependencies())
+                {
+                    EbxAssetEntry dep = App.AssetManager.GetEbxEntry(dependency);
+                    if (dep != null && !visited.Contains(dep.Guid))
+                        queue.Enqueue(dep);
+                }
+                continue;
+            }
 
             EbxAsset ebx;
             try
@@ -123,6 +174,8 @@ public static class BundleAdder
             return;
         if (res.AddToBundle(bundle))
             result.Res++;
+        if (Level < 3)
+            return;
 
         string type = ((ResourceType)res.ResType).ToString();
         try
