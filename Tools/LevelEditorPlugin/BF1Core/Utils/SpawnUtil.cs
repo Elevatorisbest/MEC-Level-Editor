@@ -225,7 +225,7 @@ public static class SpawnUtil
         layerRoot.AddNewEntity(entity);
         probe.Phase("entity + render proxies");
 
-        UndoManager.Instance?.CommitUndo(new CopyEntitiesUndoUnit(new List<Entity> { entity }, screen, "Place"));
+        EntityDeletion.CommitEdit(new CopyEntitiesUndoUnit(new List<Entity> { entity }, screen, "Place"));
         SpawnHistory.Add(blueprint);
         MeshUtil.NotifyEntitiesChanged();
 

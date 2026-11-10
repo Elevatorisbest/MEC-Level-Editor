@@ -1,3 +1,4 @@
+using Frosty.Core.Managers;
 using Frosty.Core;
 using Frosty.Core.Controls;
 using Frosty.Core.Windows;
@@ -89,22 +90,41 @@ public class SpatialEditor : ToolbarAssetEditor, IEditorProvider
 
         // edits made in this editor go into this editor's history even if another asset tab was
         // opened or closed in between
+        Active = this;
         PreviewMouseDown += (s, e) => { MakeUndoCurrent(); MakeScreenActive(); };
         PreviewKeyDown += (s, e) => { MakeUndoCurrent(); MakeScreenActive(); };
     }
+
+    /// <summary>
+    /// The level editor last used. Tools in other windows (the BF1 window) send their undo steps
+    /// and shortcuts here; before, a step made from that window could land in another history
+    /// and Ctrl+Z pressed there did nothing.
+    /// </summary>
+    public static SpatialEditor Active { get; private set; }
 
     private void MakeScreenActive()
     {
         if (screen != null)
             LevelEditorScreen.Active = screen;
+        Active = this;
     }
+
+    /// <summary>Commits an undo step to this editor's history.</summary>
+    public void CommitEdit(IUndoUnit unit)
+    {
+        MakeUndoCurrent();
+        UndoManager.Instance?.CommitUndo(unit);
+    }
+
+    public void UndoFromOutside(bool redo) => UndoRedo(redo);
+    public void DeleteSelectedFromOutside() => DeleteSelected();
 
     private bool editInProgress;
 
     private async void DeleteSelected()
     {
         MakeUndoCurrent();
-        Entity target = selectedEntity;
+        Entity target = BF1Core.Utils.EntityDeletion.ResolveEditable(selectedEntity);
         if (target == null || editInProgress || screen == null)
             return;
         if (BF1Core.Utils.CoreUtil.IsBlueMesh(target))
@@ -132,7 +152,7 @@ public class SpatialEditor : ToolbarAssetEditor, IEditorProvider
     private async void DuplicateSelected()
     {
         MakeUndoCurrent();
-        Entity target = selectedEntity;
+        Entity target = BF1Core.Utils.EntityDeletion.ResolveEditable(selectedEntity);
         if (target == null || editInProgress || screen == null)
             return;
         editInProgress = true;

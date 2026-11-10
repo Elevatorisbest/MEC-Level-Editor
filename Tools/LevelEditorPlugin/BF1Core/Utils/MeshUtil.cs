@@ -29,6 +29,8 @@ public static class MeshUtil
     public static async Task<List<Entities.Entity>> CopySelectedMesh(CopyMeshOption option)
     {
         var createdEntities = new List<Entities.Entity>();
+        if (option.Entity != null)
+            option.Entity = EntityDeletion.ResolveEditable(option.Entity);
         if (option.Entity == null)
         {
             App.Logger.LogError("当前Entity为Null");
@@ -282,7 +284,7 @@ public static class MeshUtil
             }
 
             if (createdEntities.Count > 0)
-                Frosty.Core.Managers.UndoManager.Instance.CommitUndo(new CopyEntitiesUndoUnit(createdEntities, option.LevelEditorScreen));
+                EntityDeletion.CommitEdit(new CopyEntitiesUndoUnit(createdEntities, option.LevelEditorScreen));
 
             probe.Phase("create entities + render proxies");
             App.Logger.Log("==========");
@@ -348,6 +350,8 @@ public static class MeshUtil
     /// </summary>
     public static async Task DeleteSelectedMesh(DeleteMeshOption option)
     {
+        if (option.Entity != null)
+            option.Entity = EntityDeletion.ResolveEditable(option.Entity);
         if (option.Entity == null)
         {
             App.Logger.LogError("当前Entity为Null");
@@ -370,7 +374,7 @@ public static class MeshUtil
         EntityDeletion.Deselect(option.LevelEditorScreen);
         DeletedEntity record = EntityDeletion.Delete(option.Entity, option.LevelEditorScreen);
         probe.Phase("delete object, connections, references");
-        Frosty.Core.Managers.UndoManager.Instance.CommitUndo(new DeleteEntitiesUndoUnit(new List<DeletedEntity> { record }, option.LevelEditorScreen));
+        EntityDeletion.CommitEdit(new DeleteEntitiesUndoUnit(new List<DeletedEntity> { record }, option.LevelEditorScreen));
         await Task.Yield();
 
         RaiseLayerReloaded(probe);

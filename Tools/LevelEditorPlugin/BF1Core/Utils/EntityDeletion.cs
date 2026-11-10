@@ -62,6 +62,44 @@ public sealed class ReferenceChange
 
 public static class EntityDeletion
 {
+    /// <summary>Puts an undo step into the level editor's history (not whatever history was last used).</summary>
+    public static void CommitEdit(IUndoUnit unit)
+    {
+        Editors.SpatialEditor editor = Editors.SpatialEditor.Active;
+        if (editor != null)
+            editor.CommitEdit(unit);
+        else
+            UndoManager.Instance?.CommitUndo(unit);
+    }
+
+    /// <summary>
+    /// The object that delete/copy should act on. Clicking a placed prop selects the mesh entity
+    /// inside its ObjectBlueprint; that blueprint has no Objects list (and is shared by every
+    /// copy of the prop), so go up to the reference object placed in the level or layer.
+    /// </summary>
+    public static Entity ResolveEditable(Entity entity)
+    {
+        for (Entity current = entity; current != null; current = current.Parent)
+        {
+            if (HasObjectsList(current.FileGuid))
+                return current;
+        }
+        return entity;
+    }
+
+    private static bool HasObjectsList(Guid fileGuid)
+    {
+        try
+        {
+            object root = LoadedAssetManager.Instance.GetEbxAsset(fileGuid)?.RootObject;
+            return root != null && root.GetType().GetProperty("Objects") != null;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Clears the selection in the editor (properties panel, gizmo, BF1 window).</summary>
     public static void Deselect(LevelEditorScreen screen)
     {

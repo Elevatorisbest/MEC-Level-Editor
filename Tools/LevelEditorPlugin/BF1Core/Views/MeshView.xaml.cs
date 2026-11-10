@@ -357,13 +357,13 @@ public partial class MeshView : UserControl
     /// </summary>
     private void Button_MakeAvailable_Click(object sender, RoutedEventArgs e)
     {
-        if (!(Entity is ReferenceObject reference) || reference.Blueprint == null)
+        if (!(EntityDeletion.ResolveEditable(Entity) is ReferenceObject reference) || reference.Blueprint == null)
         {
             ShowSpawnStatus("Select a placed object (a reference to a blueprint) first.");
             return;
         }
         EbxAssetEntry blueprint = App.AssetManager.GetEbxEntry(reference.Blueprint.FileGuid);
-        SpawnCheck check = SpawnUtil.Check(blueprint, SpawnTarget.SameAs(Entity));
+        SpawnCheck check = SpawnUtil.Check(blueprint, SpawnTarget.SameAs(reference));
         if (!check.CanSpawn)
         {
             ShowSpawnStatus(check.Problem);

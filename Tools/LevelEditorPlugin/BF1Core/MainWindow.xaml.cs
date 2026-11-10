@@ -23,6 +23,12 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Ctrl+Z / Ctrl+Y / Delete work here too, on the level editor's history and selection
+        // (text boxes keep their own Ctrl+Z and Delete)
+        InputBindings.Add(new System.Windows.Input.KeyBinding(new Frosty.Core.RelayCommand(_ => Editors.SpatialEditor.Active?.UndoFromOutside(false)), System.Windows.Input.Key.Z, System.Windows.Input.ModifierKeys.Control));
+        InputBindings.Add(new System.Windows.Input.KeyBinding(new Frosty.Core.RelayCommand(_ => Editors.SpatialEditor.Active?.UndoFromOutside(true)), System.Windows.Input.Key.Y, System.Windows.Input.ModifierKeys.Control));
+        InputBindings.Add(new System.Windows.Input.KeyBinding(new Frosty.Core.RelayCommand(_ => Editors.SpatialEditor.Active?.DeleteSelectedFromOutside()), System.Windows.Input.Key.Delete, System.Windows.Input.ModifierKeys.None));
+
         WinInstance = this;
     }
 
