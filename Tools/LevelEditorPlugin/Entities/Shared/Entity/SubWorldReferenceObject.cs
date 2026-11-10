@@ -89,7 +89,9 @@ public class SubWorldReferenceObject : ReferenceObject, IEntityData<FrostySdk.Eb
                 entity.SetOwner(entity);
             }
         }
-        layer.IsVisible = Data.AutoLoad;
+        // Sub-worlds the game does not load at start are hidden, unless the user chose to show
+        // the mission/side content they picked when opening the level (SubWorldLoadFilter).
+        layer.IsVisible = Data.AutoLoad || SubWorlds.SubWorldLoadFilter.ShouldShow(blueprint.Name);
         return layer;
     }
 

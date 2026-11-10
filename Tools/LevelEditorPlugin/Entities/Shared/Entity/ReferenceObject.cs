@@ -570,7 +570,13 @@ public class ReferenceObject : Entity, ISpatialReferenceEntity, ILogicEntity
                 }
 
                 GameObjectData objectData = objPointer.GetObjectAs<FrostySdk.Ebx.GameObjectData>();
-                Entity entity = CreateEntity(objectData);
+
+                // Sub-worlds left out by the load selection (Map > Sub-worlds to Load) are not
+                // created. Only the editor skips them; the reference stays in the level's data.
+                bool skip = objectData is FrostySdk.Ebx.SubWorldReferenceObjectData subWorldRef
+                    && SubWorlds.SubWorldLoadFilter.ShouldSkip(subWorldRef.BundleName);
+
+                Entity entity = skip ? null : CreateEntity(objectData);
 
                 if (entity != null)
                 {

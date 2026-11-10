@@ -750,9 +750,15 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
         Stopwatch timer = new Stopwatch();
         timer.Start();
 
+        // which sub-worlds to load (asks the user unless a saved choice is to be used)
+        SubWorlds.SubWorldPickerWindow.PrepareLevelLoad(AssetEntry.Name, out HashSet<string> excludedSubWorlds, out HashSet<string> shownSubWorlds);
+
         LoadReport report = LoadReport.Begin(AssetEntry.Name, AssetEntry.Type);
         EnsureMeshVariationsLoaded(report);
 
+        SubWorlds.SubWorldLoadFilter.Begin(excludedSubWorlds, shownSubWorlds);
+        try
+        {
         // first time loading stuff goes here
         FrostyTaskWindow.Show($"Loading {Path.GetFileName(AssetEntry.Name)}", "", (task) =>
         {
@@ -786,6 +792,11 @@ public class LevelEditor : SpatialEditor, IDragDropTargetProvider
                 throw;
             }
         });
+        }
+        finally
+        {
+            SubWorlds.SubWorldLoadFilter.End(AssetEntry.Name);
+        }
         timer.Stop();
         logger.Log($"Level loaded in {timer.Elapsed.ToString()}");
 
