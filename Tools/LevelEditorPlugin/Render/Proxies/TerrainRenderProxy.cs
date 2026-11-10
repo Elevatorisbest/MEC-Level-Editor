@@ -122,6 +122,14 @@ public class TerrainRenderProxy : RenderProxy
         return OwnerEntity.IsVisible && screenSize > 0.02f;
     }
 
+    /// <summary>No selection box around terrain (it would span the whole level).</summary>
+    public override bool GetSelectionBounds(out BoundingBox localBounds, out Matrix world)
+    {
+        localBounds = default;
+        world = Matrix.Identity;
+        return false;
+    }
+
     public override bool HitTest(Ray hitTestRay, out Vector3 hitLocation)
     {
         // Simple hit test using current proxy world bounding box

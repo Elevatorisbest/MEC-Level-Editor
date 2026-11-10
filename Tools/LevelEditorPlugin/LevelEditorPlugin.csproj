@@ -96,6 +96,10 @@
 		<MecShaderOutput>$(MSBuildProjectDirectory)\obj\Shaders\MecMeshFallback.pso</MecShaderOutput>
 		<MecVsSource>$(MSBuildProjectDirectory)\Shaders\MecMeshFallbackVS.hlsl</MecVsSource>
 		<MecVsOutput>$(MSBuildProjectDirectory)\obj\Shaders\MecMeshFallback.vso</MecVsOutput>
+		<SelectionBoxSource>$(MSBuildProjectDirectory)\Shaders\SelectionBox.hlsl</SelectionBoxSource>
+		<SelectionBoxVsOutput>$(MSBuildProjectDirectory)\obj\Shaders\SelectionBox.vso</SelectionBoxVsOutput>
+		<SelectionBoxGsOutput>$(MSBuildProjectDirectory)\obj\Shaders\SelectionBox.gso</SelectionBoxGsOutput>
+		<SelectionBoxPsOutput>$(MSBuildProjectDirectory)\obj\Shaders\SelectionBox.pso</SelectionBoxPsOutput>
 		<FxcPath>$(MSBuildProjectDirectory)\..\..\Shaders\fxc.exe</FxcPath>
 	</PropertyGroup>
 
@@ -106,11 +110,21 @@
 		<EmbeddedResource Include="$(MecVsOutput)">
 			<LogicalName>LevelEditorPlugin.Shaders.MecMeshFallback.vso</LogicalName>
 		</EmbeddedResource>
+		<!-- selection box outlines in the level view (Render/SelectionBoxRenderer.cs) -->
+		<EmbeddedResource Include="$(SelectionBoxVsOutput)">
+			<LogicalName>LevelEditorPlugin.Shaders.SelectionBox.vso</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="$(SelectionBoxGsOutput)">
+			<LogicalName>LevelEditorPlugin.Shaders.SelectionBox.gso</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="$(SelectionBoxPsOutput)">
+			<LogicalName>LevelEditorPlugin.Shaders.SelectionBox.pso</LogicalName>
+		</EmbeddedResource>
 	</ItemGroup>
 
 	<Target Name="CompileMecShader" BeforeTargets="BeforeBuild"
-	        Inputs="$(MecShaderSource);$(MecVsSource);$(MSBuildProjectDirectory)\..\..\Shaders\Common.h"
-	        Outputs="$(MecShaderOutput);$(MecVsOutput)">
+	        Inputs="$(MecShaderSource);$(MecVsSource);$(SelectionBoxSource);$(MSBuildProjectDirectory)\..\..\Shaders\Common.h"
+	        Outputs="$(MecShaderOutput);$(MecVsOutput);$(SelectionBoxVsOutput);$(SelectionBoxGsOutput);$(SelectionBoxPsOutput)">
 		<!-- The repo's Shaders\fxc.exe needs d3dcompiler_47.dll next to it, so prefer the Windows SDK's fxc.exe. -->
 		<ItemGroup>
 			<SdkFxc Include="$(MSBuildProgramFiles32)\Windows Kits\10\bin\10.*\x64\fxc.exe" />
@@ -125,6 +139,9 @@
 		<MakeDir Directories="$(MSBuildProjectDirectory)\obj\Shaders" />
 		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T ps_5_0 /E PS_MeshFallback /O3 /Fo &quot;$(MecShaderOutput)&quot; &quot;$(MecShaderSource)&quot;" />
 		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T vs_5_0 /E VS_Main /O3 /Fo &quot;$(MecVsOutput)&quot; &quot;$(MecVsSource)&quot;" />
+		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T vs_5_0 /E VS_Main /O3 /Fo &quot;$(SelectionBoxVsOutput)&quot; &quot;$(SelectionBoxSource)&quot;" />
+		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T gs_5_0 /E GS_Main /O3 /Fo &quot;$(SelectionBoxGsOutput)&quot; &quot;$(SelectionBoxSource)&quot;" />
+		<Exec Command="&quot;$(FxcPath)&quot; /nologo /T ps_5_0 /E PS_Main /O3 /Fo &quot;$(SelectionBoxPsOutput)&quot; &quot;$(SelectionBoxSource)&quot;" />
 	</Target>
 
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">

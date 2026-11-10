@@ -173,6 +173,14 @@ public class ModelRenderProxy : RenderProxy
         return renderData.HitTest(Transform, hitTestRay, out hitLocation);
     }
 
+    /// <summary>The mesh's own bounds, placed by the proxy transform (follows rotation and scale).</summary>
+    public override bool GetSelectionBounds(out BoundingBox localBounds, out Matrix world)
+    {
+        localBounds = renderData.Bounds;
+        world = Transform;
+        return true;
+    }
+
     public override void RecalculateBoundingBox()
     {
         OrientedBoundingBox meshBbox = new OrientedBoundingBox(renderData.Bounds);

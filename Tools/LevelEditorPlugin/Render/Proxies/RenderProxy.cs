@@ -110,5 +110,17 @@ public abstract class RenderProxy : MeshRenderBase
     {
     }
 
+    /// <summary>
+    /// Box drawn around this proxy when its entity is selected (see Render/SelectionBoxRenderer.cs):
+    /// <paramref name="localBounds"/> in the space that <paramref name="world"/> places in the world.
+    /// The default is the world-aligned bounding box. Returns false when no box should be drawn.
+    /// </summary>
+    public virtual bool GetSelectionBounds(out BoundingBox localBounds, out Matrix world)
+    {
+        localBounds = BoundingBox;
+        world = Matrix.Identity;
+        return true;
+    }
+
     public abstract void Dispose();
 }

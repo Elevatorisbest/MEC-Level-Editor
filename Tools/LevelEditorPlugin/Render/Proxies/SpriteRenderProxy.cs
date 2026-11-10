@@ -235,6 +235,34 @@ public class SpriteRenderProxy : RenderProxy
         return OwnerEntity.IsVisible && screenSize > 0.02f;
     }
 
+    /// <summary>
+    /// Collision volumes: their box. Sprites with a mesh: the mesh bounds. Icons only: a 1 m cube
+    /// at the entity's position. Uses the entity transform, not the camera-facing icon transform.
+    /// </summary>
+    public override bool GetSelectionBounds(out BoundingBox localBounds, out Matrix world)
+    {
+        world = originalTransform;
+        if (renderType == RenderType.CubeMesh && (obbCollisionEntityData != null || pamObbCollisionEntityData != null))
+        {
+            var halfExtents = obbCollisionEntityData != null
+                ? obbCollisionEntityData.HalfExtents
+                : pamObbCollisionEntityData.HalfExtents;
+            Vector3 he = new Vector3(Math.Abs(halfExtents.x), Math.Abs(halfExtents.y), Math.Abs(halfExtents.z));
+            localBounds = new BoundingBox(-he, he);
+            return true;
+        }
+        if (renderType == RenderType.ResMesh && meshSet != null)
+        {
+            Resources.AxisAlignedBox box = meshSet.BoundingBox;
+            localBounds = new BoundingBox(new Vector3(box.min.x, box.min.y, box.min.z), new Vector3(box.max.x, box.max.y, box.max.z));
+            return true;
+        }
+
+        world = Matrix.Translation(originalTransform.TranslationVector);
+        localBounds = new BoundingBox(new Vector3(-0.5f), new Vector3(0.5f));
+        return true;
+    }
+
     public override void SetSelected(RenderCreateState state, bool newSelected)
     {
         float[] colors = tintColor.ToArray();

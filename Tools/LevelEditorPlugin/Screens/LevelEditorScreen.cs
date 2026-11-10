@@ -812,6 +812,7 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         SolidColorMeshWrapper.DisposeSharedState();
         instanceBatcher.Dispose();
+        selectionBoxRenderer.Dispose();
         mecViewOptions?.Dispose();
         mecViewOptions = null;
     }
@@ -1650,6 +1651,12 @@ public class LevelEditorScreen : DeferredRenderScreen2
 
         RenderMeshes(MeshRenderPath.Forward, sprites);
 
+        // Box outlines around the selected objects, depth-tested against the scene (still the
+        // scene depth buffer here); the gizmos below are drawn on top of them.
+        DrawSelectionBoxes();
+        Viewport.Context.VertexShader.SetConstantBuffer(0, viewConstants.Buffer);
+        Viewport.Context.PixelShader.SetConstantBuffer(0, viewConstants.Buffer);
+
         // Foreground elements
         Viewport.Context.OutputMerger.SetRenderTargets(gizmoDepthTexture.DSV, rts);
         Viewport.Context.OutputMerger.DepthStencilState = D3DUtils.CreateDepthStencilState(true, depthComparison: D3D11.Comparison.LessEqual);
@@ -1705,6 +1712,80 @@ public class LevelEditorScreen : DeferredRenderScreen2
     private static bool gpuInfoLogged;
     private readonly FrameStats frameStats = new FrameStats("Level editor viewport");
     private readonly InstancedMeshBatcher instanceBatcher = new InstancedMeshBatcher();
+    private readonly SelectionBoxRenderer selectionBoxRenderer = new SelectionBoxRenderer();
+    private readonly List<Vector3[]> selectionBoxes = new List<Vector3[]>();
+    private readonly List<RenderProxy> selectionBoxProxies = new List<RenderProxy>();
+    private bool selectionBoxErrorLogged;
+
+    /// <summary>
+    /// One box per selected entity (primary selection and Ctrl/Shift-clicked ones), plus one around
+    /// all of them when more than one is selected. Render thread only: selectedProxies and
+    /// extraProxies are changed by render tasks, which also run on this thread.
+    /// </summary>
+    private void DrawSelectionBoxes()
+    {
+        try
+        {
+            selectionBoxes.Clear();
+            if (selectedProxies.Count > 0)
+                AddSelectionBox(selectedProxies[0].OwnerEntity?.Owner, selectedProxies);
+
+            if (extraProxies.Count > 0)
+            {
+                // extraProxies is flat; group it by the selected entity, keeping selection order
+                List<Entity> owners = new List<Entity>();
+                foreach (RenderProxy proxy in extraProxies)
+                {
+                    Entity owner = proxy.OwnerEntity?.Owner;
+                    if (!owners.Contains(owner))
+                        owners.Add(owner);
+                }
+                foreach (Entity owner in owners)
+                {
+                    selectionBoxProxies.Clear();
+                    foreach (RenderProxy proxy in extraProxies)
+                    {
+                        if (proxy.OwnerEntity?.Owner == owner)
+                            selectionBoxProxies.Add(proxy);
+                    }
+                    AddSelectionBox(owner, selectionBoxProxies);
+                }
+            }
+
+            if (selectionBoxes.Count > 0)
+            {
+                // keep the rasterizer state and topology the sprites left for the gizmos
+                D3D11.RasterizerState oldRasterizer = Viewport.Context.Rasterizer.State;
+                SharpDX.Direct3D.PrimitiveTopology oldTopology = Viewport.Context.InputAssembler.PrimitiveTopology;
+                try
+                {
+                    selectionBoxRenderer.Draw(Viewport.Context, Viewport.Device, camera, Viewport.ViewportWidth, Viewport.ViewportHeight, selectionBoxes);
+                }
+                finally
+                {
+                    Viewport.Context.Rasterizer.State = oldRasterizer;
+                    Viewport.Context.InputAssembler.PrimitiveTopology = oldTopology;
+                    oldRasterizer?.Dispose(); // the getter added a reference
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Viewport.Context.GeometryShader.Set(null);
+            if (!selectionBoxErrorLogged)
+            {
+                selectionBoxErrorLogged = true;
+                LevelEditorLog.Warning("Render", "Could not draw the selection boxes", ex);
+            }
+        }
+    }
+
+    private void AddSelectionBox(Entity entity, List<RenderProxy> entityProxies)
+    {
+        Vector3[] corners = new Vector3[8];
+        if (SelectionBoxRenderer.TryGetEntityBox(entity, entityProxies, corners))
+            selectionBoxes.Add(corners);
+    }
 
     private struct MecViewOptions
     {
