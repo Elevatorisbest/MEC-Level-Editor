@@ -77,6 +77,12 @@ existing one). Per shape:
   (the copy dropped the RigidBodyData the box's `PhysicsBodies` points to), and Flags high bits
   copied from a level object (realm bits of connections the new objects do not have). The test
   shape also used a water plane material.
+- 27be4b6: no crash, collision works in game, but the model is invisible (also with other
+  materials). New objects had id-only Flags. Next version: each new object keeps the Flags high
+  byte of the level object it was copied from (the static model template had 0x1F), and the log
+  lists which high bytes the level's own static models and collision boxes use, plus more of the
+  template model's fields. If the model is still invisible, the next suspects are the mesh data
+  written for MEC, the LOD/cull settings copied from the template mesh, and the variation entry.
 
 ## Checked so far
 
@@ -86,7 +92,7 @@ existing one). Per shape:
 - Winding: front faces are counter-clockwise with outward normals (`cross(v1-v0, v2-v0)` points
   out), derived from Frosty's renderer (back-face culling with X mirrored), which shows game
   meshes correctly.
-- Not yet run in the editor or the game.
+- In game (27be4b6): collision boxes work; the model was invisible.
 
 ## Not done
 

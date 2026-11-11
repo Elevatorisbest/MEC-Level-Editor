@@ -386,7 +386,7 @@ public static class ShapeAssetBuilder
         MeshUtil.SetIfPresent(model, "Enabled", true);
         MeshUtil.SetIfPresent(model, "BoneCount", 0u);
         ApplyParkourFlags(model, options);
-        AddChild(asset, root, model);
+        AddChild(asset, root, model, HighFlags(templates.StaticModel));
 
         // the collision boxes
         foreach (CollisionBox box in boxes)
@@ -402,7 +402,7 @@ public static class ShapeAssetBuilder
             o.HalfExtents = new FrostySdk.Ebx.Vec3 { x = box.HalfExtents.X, y = box.HalfExtents.Y, z = box.HalfExtents.Z };
             MeshUtil.SetIfPresent(obb, "Enabled", true);
             ApplyParkourFlags(obb, options);
-            AddChild(asset, root, obb);
+            AddChild(asset, root, obb, HighFlags(templates.Collision));
         }
 
         asset.Update();
@@ -423,20 +423,39 @@ public static class ShapeAssetBuilder
     private static PointerRef PointerRefPolicy(PointerRef pointer) =>
         pointer.Type == PointerRefType.Internal ? new PointerRef() : pointer;
 
-    private static void AddChild(EbxAsset asset, dynamic root, object data)
+    private static void AddChild(EbxAsset asset, dynamic root, object data, uint highFlags)
     {
-        AddObject(asset, data);
+        AddObject(asset, data, highFlags);
         root.Objects.Add(new PointerRef(data));
     }
 
+    /// <summary>The high byte of an object's Flags (0 when there is no such object).</summary>
+    private static uint HighFlags(object source)
+    {
+        if (source == null)
+            return 0;
+        try
+        {
+            return (uint)((dynamic)source).Flags & 0xFF000000u;
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
+    }
+
     /// <summary>
-    /// Gives an object a new instance id and adds it to the asset. Flags get only the id bits (as
-    /// CoreUtil.CreateClassObjectRef does for placed objects, which work in game): the high bits
-    /// describe the realms of the object's property/event/link connections (see ReferenceObject),
-    /// and new shape objects have none. The first version copied them from a level object
-    /// (0x1F……), a suspect for the game crashing on load.
+    /// Gives an object a new instance id and adds it to the asset. Flags: low 24 bits = id from the
+    /// instance guid; high byte from the object it was copied from.
+    ///
+    /// History: 993da38 copied the high byte (and dropped the collision boxes' physics bodies):
+    /// MEC crashed on load. 27be4b6 kept the bodies and used id-only flags: no crash, collision
+    /// worked, but the static model was invisible in game. Static models in game data carry a
+    /// high byte (0x1F on the template), placed reference objects work without one; so the high
+    /// byte matters for static models (likely creation realm) and the crash came from the
+    /// missing physics body.
     /// </summary>
-    private static void AddObject(EbxAsset asset, object data)
+    private static void AddObject(EbxAsset asset, object data, uint highFlags = 0)
     {
         Type type = data.GetType();
         AssetClassGuid guid = new AssetClassGuid(FrostySdk.Utils.GenerateDeterministicGuid(asset.Objects, type, asset.FileGuid), -1);
@@ -445,7 +464,7 @@ public static class ShapeAssetBuilder
         {
             byte[] bytes = guid.ExportedGuid.ToByteArray();
             uint id = (uint)((bytes[2] << 16) | (bytes[1] << 8) | bytes[0]);
-            type.GetProperty("Flags", BindingFlags.Public | BindingFlags.Instance)?.SetValue(data, id);
+            type.GetProperty("Flags", BindingFlags.Public | BindingFlags.Instance)?.SetValue(data, (highFlags & 0xFF000000u) | id);
         }
         asset.AddObject(data);
     }
@@ -471,7 +490,7 @@ public static class ShapeAssetBuilder
             depth++;
             object copy = DataCopy.DeepCopy(target, Pointer);
             depth--;
-            AddObject(asset, copy);
+            AddObject(asset, copy, HighFlags(target));
             copies[target] = copy;
             return new PointerRef(copy);
         }
@@ -508,6 +527,7 @@ public static class ShapeAssetBuilder
             }
 
             Templates t = new Templates();
+            Dictionary<uint, int> modelHigh = new Dictionary<uint, int>(), boxHigh = new Dictionary<uint, int>();
             int bestModel = -1;
             int bestCollision = -1;
             int scanned = 0;
@@ -519,6 +539,17 @@ public static class ShapeAssetBuilder
                 if (data == null)
                     continue;
                 string typeName = data.GetType().Name;
+                if (typeName == "PamStaticModelEntityData" || typeName == "PamOBBCollisionEntityData")
+                {
+                    // which Flags high bytes the game's own objects use (diagnostics)
+                    try
+                    {
+                        uint high = (uint)((dynamic)data).Flags >> 24;
+                        Dictionary<uint, int> counts = typeName == "PamStaticModelEntityData" ? modelHigh : boxHigh;
+                        counts[high] = counts.TryGetValue(high, out int c) ? c + 1 : 1;
+                    }
+                    catch (Exception) { }
+                }
                 if (typeName == "PamStaticModelEntityData")
                 {
                     // prefer models without physics and network ids: closest to what a shape is
@@ -564,7 +595,8 @@ public static class ShapeAssetBuilder
                 }
             }
 
-            LevelEditorLog.Info("Shapes", $"Templates from the level: static model {Describe(t.StaticModel)} (score {bestModel}), collision box {Describe(t.Collision)} (score {bestCollision}), prefab header {(t.Prefab != null ? "found" : "not found")}");
+            string Histogram(Dictionary<uint, int> counts) => string.Join(", ", counts.OrderByDescending(kv => kv.Value).Take(6).Select(kv => $"0x{kv.Key:X2}: {kv.Value}"));
+            LevelEditorLog.Info("Shapes", $"Templates from the level: static model {Describe(t.StaticModel)} (score {bestModel}), collision box {Describe(t.Collision)} (score {bestCollision}), prefab header {(t.Prefab != null ? "found" : "not found")}. Flags high bytes in this level: static models {Histogram(modelHigh)}; collision boxes {Histogram(boxHigh)}");
             lock (cache)
                 cache[world] = t;
             return t;
@@ -578,6 +610,8 @@ public static class ShapeAssetBuilder
             {
                 dynamic d = data;
                 string extra = "";
+                if (data.GetType().Name == "PamStaticModelEntityData")
+                    extra = $", bone count {d.BoneCount}, base poses {((IList)d.BasePoseTransforms).Count}, physics part infos {((IList)d.PhysicsPartInfos).Count}, part links {((IList)d.PartLinks).Count}, components {((IList)d.Components).Count}, network ids {d.NetworkInfo.NetworkIdCount}";
                 if (data.GetType().Name == "PamOBBCollisionEntityData")
                 {
                     extra = $", {((IList)d.PhysicsBodies).Count} physics bodies, layer {d.CollisionLayer}, half extents {d.HalfExtents.x}/{d.HalfExtents.y}/{d.HalfExtents.z}";
