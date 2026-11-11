@@ -95,6 +95,16 @@ existing one). Per shape:
   `_testoriginal` invisible → the model/prefab setup is the problem. `_testoriginal` visible but
   `_testcopy` invisible → duplicating a mesh into the level is. Both visible, Normal invisible →
   the geometry import is. The log also describes the mesh layout before and after the import.
+- ab6a7ac test result: Normal crashed on load (no error); `_testcopy` and `_testoriginal` both
+  had working collision and an invisible model. So even the game's own unchanged mesh is
+  invisible: the model object is wrong, not (only) the mesh. Found: the template static model has
+  one component, and its `ClientRuntimeComponentCount`/`ServerRuntimeComponentCount` and
+  `PhysicsPartInfos` count it, but the copy dropped internal objects, so the shape's model had no
+  component while its counts said one. Next version: the model keeps copies of its internal
+  objects (as the collision boxes do), and the template search prefers self-contained static
+  models (no components, part infos, part links or runtime component counts). The log lists the
+  template's component types and runtime counts. Whether the Normal crash has the same cause is
+  not known yet.
 
 ## Checked so far
 

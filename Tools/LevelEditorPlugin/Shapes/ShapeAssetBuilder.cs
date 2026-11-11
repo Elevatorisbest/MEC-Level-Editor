@@ -438,10 +438,13 @@ public static class ShapeAssetBuilder
             MeshUtil.SetIfPresent(root, "TimeDeltaType", ((dynamic)templates.Prefab).TimeDeltaType);
         }
 
-        // the static model (its internal objects, such as Havok physics made for the source's own
-        // mesh, are left out)
+        // the static model, with copies of its internal objects. Earlier versions dropped them: the
+        // template's one component went missing while its Client/ServerRuntimeComponentCount and
+        // PhysicsPartInfos still counted it, and the model was invisible in game (also with an
+        // unchanged game mesh) or the game crashed on load. The template is preferably a model
+        // without components, physics part infos and part links (see Templates).
         object model = templates.StaticModel != null
-            ? DataCopy.CopyEntityData(templates.StaticModel, PointerRefPolicy)
+            ? CopyWithInternals(templates.StaticModel, asset)
             : TypeLibrary.CreateObject(TypeLibrary.GetType("PamStaticModelEntityData") != null ? "PamStaticModelEntityData" : "StaticModelEntityData");
         dynamic m = model;
         m.Mesh = new PointerRef(new EbxImportReference { FileGuid = meshEntry.Guid, ClassGuid = ((dynamic)meshAsset.RootObject).GetInstanceGuid().ExportedGuid });
@@ -484,10 +487,6 @@ public static class ShapeAssetBuilder
         MeshUtil.SetIfPresent(data, "CantWallrun", options.CantWallrun);
     }
 
-    /// <summary>Copied objects keep references to other assets but drop those into the source's own file.</summary>
-    private static PointerRef PointerRefPolicy(PointerRef pointer) =>
-        pointer.Type == PointerRefType.Internal ? new PointerRef() : pointer;
-
     private static void AddChild(EbxAsset asset, dynamic root, object data, uint highFlags)
     {
         AddObject(asset, data, highFlags);
@@ -515,10 +514,10 @@ public static class ShapeAssetBuilder
     ///
     /// History: 993da38 copied the high byte (and dropped the collision boxes' physics bodies):
     /// MEC crashed on load. 27be4b6 kept the bodies and used id-only flags: no crash, collision
-    /// worked, but the static model was invisible in game. Static models in game data carry a
-    /// high byte (0x1F on the template), placed reference objects work without one; so the high
-    /// byte matters for static models (likely creation realm) and the crash came from the
-    /// missing physics body.
+    /// worked, but the static model was invisible in game. ab32c27 restored the high byte: still
+    /// invisible, so the high byte was not the cause. A test with the game's own unchanged mesh was
+    /// invisible too: the model object itself was wrong (its internal component had been dropped
+    /// while its runtime component counts still counted it); fixed by copying internals.
     /// </summary>
     private static void AddObject(EbxAsset asset, object data, uint highFlags = 0)
     {
@@ -596,6 +595,7 @@ public static class ShapeAssetBuilder
             int bestModel = -1;
             int bestCollision = -1;
             int scanned = 0;
+            int selfContained = 0;
             foreach (Entity entity in world.Entities)
             {
                 if (++scanned > 400000 && t.StaticModel != null && t.Collision != null && t.Prefab != null)
@@ -623,6 +623,12 @@ public static class ShapeAssetBuilder
                     try { if (((PointerRef)d.PhysicsData).Type == PointerRefType.Null) score += 2; } catch (Exception) { }
                     try { if ((uint)d.NetworkInfo.NetworkIdCount == 0) score += 1; } catch (Exception) { }
                     try { if ((bool)d.Visible && (bool)d.Enabled) score += 4; } catch (Exception) { }
+                    // self-contained: nothing that belongs to the source's own mesh or physics
+                    if (IsSelfContained(data))
+                    {
+                        score += 16;
+                        selfContained++;
+                    }
                     if (score > bestModel)
                     {
                         bestModel = score;
@@ -661,10 +667,25 @@ public static class ShapeAssetBuilder
             }
 
             string Histogram(Dictionary<uint, int> counts) => string.Join(", ", counts.OrderByDescending(kv => kv.Value).Take(6).Select(kv => $"0x{kv.Key:X2}: {kv.Value}"));
-            LevelEditorLog.Info("Shapes", $"Templates from the level: static model {Describe(t.StaticModel)} (score {bestModel}), collision box {Describe(t.Collision)} (score {bestCollision}), prefab header {(t.Prefab != null ? "found" : "not found")}. Flags high bytes in this level: static models {Histogram(modelHigh)}; collision boxes {Histogram(boxHigh)}");
+            LevelEditorLog.Info("Shapes", $"Templates from the level: static model {Describe(t.StaticModel)} (score {bestModel}; {selfContained} self-contained static models in the level), collision box {Describe(t.Collision)} (score {bestCollision}), prefab header {(t.Prefab != null ? "found" : "not found")}. Flags high bytes in this level: static models {Histogram(modelHigh)}; collision boxes {Histogram(boxHigh)}");
             lock (cache)
                 cache[world] = t;
             return t;
+        }
+
+        /// <summary>No components, physics part infos, part links or runtime component counts.</summary>
+        private static bool IsSelfContained(object data)
+        {
+            try
+            {
+                dynamic d = data;
+                return ((IList)d.Components).Count == 0 && ((IList)d.PhysicsPartInfos).Count == 0 && ((IList)d.PartLinks).Count == 0
+                    && (byte)d.ClientRuntimeComponentCount == 0 && (byte)d.ServerRuntimeComponentCount == 0;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private static string Describe(object data)
@@ -676,7 +697,7 @@ public static class ShapeAssetBuilder
                 dynamic d = data;
                 string extra = "";
                 if (data.GetType().Name == "PamStaticModelEntityData")
-                    extra = $", bone count {d.BoneCount}, base poses {((IList)d.BasePoseTransforms).Count}, physics part infos {((IList)d.PhysicsPartInfos).Count}, part links {((IList)d.PartLinks).Count}, components {((IList)d.Components).Count}, network ids {d.NetworkInfo.NetworkIdCount}";
+                    extra = $", bone count {d.BoneCount}, base poses {((IList)d.BasePoseTransforms).Count}, physics part infos {((IList)d.PhysicsPartInfos).Count}, part links {((IList)d.PartLinks).Count}, components {((IList)d.Components).Count} [{string.Join(", ", ((IList)d.Components).Cast<object>().Select(c => c is PointerRef r ? (r.Type == PointerRefType.Internal ? r.Internal?.GetType().Name : r.Type.ToString()) : "?"))}], runtime components client/server {d.ClientRuntimeComponentCount}/{d.ServerRuntimeComponentCount}, runtime transformations client/server {d.ClientRuntimeTransformationCount}/{d.ServerRuntimeTransformationCount}, physics {(((PointerRef)d.PhysicsData).Type)}, network ids {d.NetworkInfo.NetworkIdCount}";
                 if (data.GetType().Name == "PamOBBCollisionEntityData")
                 {
                     extra = $", {((IList)d.PhysicsBodies).Count} physics bodies, layer {d.CollisionLayer}, half extents {d.HalfExtents.x}/{d.HalfExtents.y}/{d.HalfExtents.z}";
