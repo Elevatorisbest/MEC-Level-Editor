@@ -344,6 +344,12 @@ public partial class ShapeBuilderWindow : FrostyDockableWindow
             CantClimb = CheckBox_CantClimb.IsChecked == true,
             CantVault = CheckBox_CantVault.IsChecked == true,
             CantWallrun = CheckBox_CantWallrun.IsChecked == true,
+            MeshSource = ComboBox_MeshSource.SelectedIndex switch
+            {
+                1 => ShapeMeshSource.CopyOfSurfaceMesh,
+                2 => ShapeMeshSource.SurfaceMeshAsIs,
+                _ => ShapeMeshSource.Generated,
+            },
         };
 
         Matrix placement = Placement(p, camera);

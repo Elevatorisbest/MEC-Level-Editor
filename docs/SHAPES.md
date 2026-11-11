@@ -83,6 +83,18 @@ existing one). Per shape:
   lists which high bytes the level's own static models and collision boxes use, plus more of the
   template model's fields. If the model is still invisible, the next suspects are the mesh data
   written for MEC, the LOD/cull settings copied from the template mesh, and the variation entry.
+- ab32c27: still invisible (collision works). The Flags high byte is not the cause.
+- Next: a test choice in the Shape Builder ("Test (model invisible in game)") to split the
+  problem. Make one shape of each kind side by side in one session and check which show in game:
+  - *Normal*: new mesh with the shape's geometry;
+  - *new mesh, unchanged copy of the surface's mesh* (`_testcopy`): duplicated mesh asset,
+    resource and chunks plus the variation entry, no geometry import;
+  - *no new mesh, use the surface's own mesh* (`_testoriginal`): same prefab and model setup,
+    pointing at the existing mesh.
+
+  `_testoriginal` invisible → the model/prefab setup is the problem. `_testoriginal` visible but
+  `_testcopy` invisible → duplicating a mesh into the level is. Both visible, Normal invisible →
+  the geometry import is. The log also describes the mesh layout before and after the import.
 
 ## Checked so far
 

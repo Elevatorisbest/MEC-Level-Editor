@@ -44,9 +44,24 @@ public sealed class ShapeSurface
     }
 }
 
+/// <summary>
+/// Which mesh the shape's model shows. Anything but Generated is a test to find out why a shape's
+/// model is invisible in game while its collision works.
+/// </summary>
+public enum ShapeMeshSource
+{
+    /// <summary>A new mesh with the shape's geometry (normal use).</summary>
+    Generated,
+    /// <summary>A new mesh that is an unchanged copy of the surface's mesh (no geometry import).</summary>
+    CopyOfSurfaceMesh,
+    /// <summary>No new mesh: the model uses the surface's own mesh asset.</summary>
+    SurfaceMeshAsIs,
+}
+
 /// <summary>MEC parkour flags (PamStaticModelEntityData / PamOBBCollisionEntityData).</summary>
 public sealed class ShapeOptions
 {
+    public ShapeMeshSource MeshSource { get; set; } = ShapeMeshSource.Generated;
     public bool Collision { get; set; } = true;
     public bool CantStand { get; set; }
     public bool CantClimb { get; set; }
@@ -113,7 +128,13 @@ public static class ShapeAssetBuilder
             folder = "Levels/";
         folder += FolderName + "/";
         int index = NextIndex(folder);
-        string baseName = $"Shape{index:000}_{p.Describe()}";
+        string testTag = options.MeshSource switch
+        {
+            ShapeMeshSource.CopyOfSurfaceMesh => "_testcopy",
+            ShapeMeshSource.SurfaceMeshAsIs => "_testoriginal",
+            _ => "",
+        };
+        string baseName = $"Shape{index:000}_{p.Describe()}{testTag}";
         string meshName = (folder + baseName + "_mesh").ToLowerInvariant(); // meshes have lowercase names
         string prefabName = folder + baseName;
 
@@ -121,7 +142,17 @@ public static class ShapeAssetBuilder
         List<CollisionBox> boxes = options.Collision ? ShapeGenerator.BuildCollision(p) : new List<CollisionBox>();
 
         // 1. mesh
-        EbxAssetEntry meshEntry = CreateMesh(templateMesh, surface, meshName, bundle, geometry, out EbxAsset meshAsset);
+        EbxAssetEntry meshEntry;
+        EbxAsset meshAsset;
+        if (options.MeshSource == ShapeMeshSource.SurfaceMeshAsIs)
+        {
+            meshEntry = templateMesh;
+            meshAsset = App.AssetManager.GetEbx(templateMesh);
+        }
+        else
+        {
+            meshEntry = CreateMesh(templateMesh, surface, meshName, bundle, options.MeshSource == ShapeMeshSource.Generated ? geometry : null, out meshAsset);
+        }
         probe.Phase("mesh");
 
         // 2. variation entry (textures)
@@ -168,7 +199,7 @@ public static class ShapeAssetBuilder
         Entity placed = SpawnUtil.Spawn(prefabEntry, target, screen, false, out _, placement);
         probe.Phase("place");
 
-        string summary = $"Created {prefabName} ({geometry.TriangleCount} triangles, {boxes.Count} collision box(es), surface {surface}) in {targetEntry.Name}; {variationNote}; bundles: {bundleNote}";
+        string summary = $"Created {prefabName} (mesh: {options.MeshSource}, {meshEntry.Name}; {geometry.TriangleCount} triangles, {boxes.Count} collision box(es), surface {surface}) in {targetEntry.Name}; {variationNote}; bundles: {bundleNote}";
         LevelEditorLog.Info("Shapes", summary);
         return new ShapeResult { Prefab = prefabEntry, Mesh = meshEntry, Placed = placed, Summary = summary };
     }
@@ -243,6 +274,13 @@ public static class ShapeAssetBuilder
         App.AssetManager.ModifyRes(res.Name, meshSet);
         App.AssetManager.ModifyEbx(entry.Name, asset);
 
+        if (geometry == null)
+        {
+            LevelEditorLog.Info("Shapes", $"Mesh {name} (unchanged copy): {DescribeMeshSet(meshSet)}");
+            return entry; // test: an unchanged copy of the surface mesh
+        }
+        LevelEditorLog.Info("Shapes", $"Surface mesh {template.Name} before import: {DescribeMeshSet(meshSet)}");
+
         // geometry: through a temporary FBX and Frosty's importer (handles every vertex format)
         string fbx = Path.Combine(Path.GetTempPath(), "FrostyLevelEditor", $"shape_{Guid.NewGuid():N}.fbx");
         try
@@ -264,7 +302,31 @@ public static class ShapeAssetBuilder
         });
         App.AssetManager.ModifyRes(res.Name, meshSet);
         App.AssetManager.ModifyEbx(entry.Name, asset);
+        LevelEditorLog.Info("Shapes", $"Mesh {name} after import: {DescribeMeshSet(meshSet)}");
         return entry;
+    }
+
+    /// <summary>Layout of a MeshSet for the log (to compare a generated mesh with its source).</summary>
+    private static string DescribeMeshSet(MeshSet meshSet)
+    {
+        try
+        {
+            var b = meshSet.BoundingBox;
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append($"flags {meshSet.Flags}, bounds ({b.min.x:0.##},{b.min.y:0.##},{b.min.z:0.##})-({b.max.x:0.##},{b.max.y:0.##},{b.max.z:0.##}), {meshSet.Lods.Count} LOD(s)");
+            for (int i = 0; i < meshSet.Lods.Count; i++)
+            {
+                MeshSetLod lod = meshSet.Lods[i];
+                sb.Append($"; LOD{i}: flags {lod.Flags}, vb {lod.VertexBufferSize} B, ib {lod.IndexBufferSize} B, chunk {(lod.ChunkId == Guid.Empty ? "inline" : lod.ChunkId.ToString())}, sections [");
+                sb.Append(string.Join(", ", lod.Sections.Select(sec => $"{(string.IsNullOrEmpty(sec.Name) ? "(unnamed)" : sec.Name)}: {sec.VertexCount} v / {sec.PrimitiveCount} tri")));
+                sb.Append(']');
+            }
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            return "(could not describe: " + ex.Message + ")";
+        }
     }
 
     private static EbxAsset CopyEbx(EbxAsset source)
@@ -347,6 +409,9 @@ public static class ShapeAssetBuilder
             }
             return pointer;
         }
+
+        if (newMesh.Guid == template.Guid && sourceName == targetDbEntry.Name)
+            return $"the variation entry of {template.Filename} is already in {targetDbEntry.Name}";
 
         EbxAsset targetDb = App.AssetManager.GetEbx(targetDbEntry);
         IList entries = (IList)((dynamic)targetDb.RootObject).Entries;

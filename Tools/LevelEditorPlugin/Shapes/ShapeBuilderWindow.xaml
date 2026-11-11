@@ -161,6 +161,14 @@
                 <CheckBox x:Name="CheckBox_CantVault" Content="Can't vault over it" />
                 <CheckBox x:Name="CheckBox_CantWallrun" Content="Can't wallrun on it" />
 
+                <TextBlock Style="{StaticResource Heading}" Text="Test (model invisible in game)" />
+                <ComboBox x:Name="ComboBox_MeshSource" SelectedIndex="0" ToolTip="Tests to find out why a shape's model does not show in game. Make one shape of each kind side by side in the same session, then check which ones you can see in game.">
+                    <ComboBoxItem Content="Normal: new mesh with the shape's geometry" />
+                    <ComboBoxItem Content="Test: new mesh, unchanged copy of the surface's mesh" />
+                    <ComboBoxItem Content="Test: no new mesh, use the surface's own mesh" />
+                </ComboBox>
+                <TextBlock Style="{StaticResource Hint}" Text="The test kinds show the selected object's model (not the shape) with the shape's collision boxes; their names end in _testcopy / _testoriginal." />
+
                 <TextBlock Style="{StaticResource Heading}" Text="Place" />
                 <StackPanel Orientation="Horizontal">
                     <RadioButton x:Name="Radio_TargetRoot" Content="Into the level root" GroupName="Target" IsChecked="True" ToolTip="The level's own blueprint: always loaded while the level is." />
