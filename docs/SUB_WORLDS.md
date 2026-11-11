@@ -24,6 +24,9 @@ holds what matches no pattern (`Aline`, `Jukebox`). Known from playing: `Backdro
 structures, `SkyCity_Backdrop` = the sky city, `BaubleMall` = the Bauble mall,
 `TrainstationPropsPreRaid` / `PostRaid` = the trainstation interior where Faith lives, before and
 after the raid; these are under "Environment, backdrops and landmarks".
+`Birdman` is Birdman's side mission content (under Side missions) and `ReleaseBackdrop` holds the
+pre-rendered cloud textures of the first mission (under Story missions > Release); City only
+leaves both out.
 
 ## In the editor
 

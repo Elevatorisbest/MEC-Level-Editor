@@ -143,7 +143,7 @@ public static class SubWorldCatalog
         ("BirdmansRoute", "Birdman's Route"),
     };
 
-    private static readonly string[] CharacterNames = { "Birdman", "Nomad", "Plastic", "Rebecca", "Beatrix", "Icarus", "DogenHenchMen" };
+    private static readonly string[] CharacterNames = { "Nomad", "Plastic", "Rebecca", "Beatrix", "Icarus", "DogenHenchMen" };
     private static readonly string[] DistrictNames = { "Anchor", "Downtown", "TheView", "Construction", "Trainstation", "Rezoning" };
 
     private static readonly Regex OpenWorldJob = new Regex(@"^OWPh(\d+)([A-Za-z]+?)(OppMiss|Delivery)(\d+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -152,6 +152,8 @@ public static class SubWorldCatalog
     // What some sub-worlds are, as far as known (from playing the game). Shown in the picker.
     private static readonly Dictionary<string, string> Notes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
+        ["ReleaseBackdrop"] = "pre-rendered cloud textures for the first mission",
+        ["Birdman"] = "Birdman's side mission content",
         ["Backdrops"] = "far-away city structures around the playable city",
         ["SkyCity_Backdrop"] = "the sky city",
         ["BaubleMall"] = "the Bauble mall",
@@ -225,6 +227,24 @@ public static class SubWorldCatalog
     {
         string n = ShortNameOf(assetName);
         SubWorldInfo info = new SubWorldInfo { AssetName = assetName, ShortName = n, Category = SubWorldCategory.Other };
+
+        // sub-worlds whose name does not tell what they belong to (known from playing the game)
+        if (string.Equals(n, "Birdman", StringComparison.OrdinalIgnoreCase))
+        {
+            // Birdman's side mission content; his deliveries/route are BirdmansDelivery/BirdmansRoute
+            info.Category = SubWorldCategory.SideMissions;
+            info.Group = "Birdman";
+            info.GroupOrder = SideMissions.Length;
+            return info;
+        }
+        if (string.Equals(n, "ReleaseBackdrop", StringComparison.OrdinalIgnoreCase))
+        {
+            // pre-rendered cloud textures for the first mission (Release)
+            info.Category = SubWorldCategory.StoryMissions;
+            info.Group = "Release";
+            info.GroupOrder = 0;
+            return info;
+        }
 
         // order matters: specific patterns before mission and district prefixes
         Match job = OpenWorldJob.Match(n);
