@@ -286,12 +286,14 @@ public partial class SubWorldPickerWindow : FrostyDockableWindow
                 }
                 // first time: "City only"; afterwards the saved choice
                 bool on = saved ? !excluded.Contains(item.AssetName) : !category.IsOptionalContent;
+                string note = SubWorldCatalog.Note(item.ShortName);
                 Node leaf = new Node
                 {
                     Title = item.ShortName,
-                    ToolTip = item.AssetName,
+                    ToolTip = note == null ? item.AssetName : item.AssetName + "\n" + note,
                     Item = item,
                     Parent = parent,
+                    Detail = note ?? "",
                 };
                 leaf.SetChecked(on, false, false);
                 parent.Children.Add(leaf);

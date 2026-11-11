@@ -92,8 +92,10 @@ public static class SubWorldCatalog
         new SubWorldCategoryInfo(SubWorldCategory.CityGeometry, "City geometry (zone-streamed)",
             "The city's buildings, props and ground. The game streams their pieces by player position; " +
             "unticking a root here leaves out all of its pieces.", false),
-        new SubWorldCategoryInfo(SubWorldCategory.EnvironmentAndBackdrops, "Environment and backdrops",
-            "Distant city (VISTA), visual environments, backdrops, sky city, LMS… sub-worlds (purpose not confirmed).", false),
+        new SubWorldCategoryInfo(SubWorldCategory.EnvironmentAndBackdrops, "Environment, backdrops and landmarks",
+            "Distant city (VISTA, Backdrops), visual environments, sky city, the Bauble, the trainstation interior, " +
+            "LMS… sub-worlds (purpose not confirmed). Alternative states (ruined, destroyed, after the raid) " +
+            "are loaded but start hidden; switch them on in the Layers panel.", false),
         new SubWorldCategoryInfo(SubWorldCategory.LogicAndSound, "Logic and sound",
             "Main game logic and scene sound.", false),
         new SubWorldCategoryInfo(SubWorldCategory.Other, "Other",
@@ -146,6 +148,36 @@ public static class SubWorldCatalog
 
     private static readonly Regex OpenWorldJob = new Regex(@"^OWPh(\d+)([A-Za-z]+?)(OppMiss|Delivery)(\d+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex DistrictArea = new Regex(@"^(" + string.Join("|", DistrictNames) + @")(Area\d+)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    // What some sub-worlds are, as far as known (from playing the game). Shown in the picker.
+    private static readonly Dictionary<string, string> Notes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Backdrops"] = "far-away city structures around the playable city",
+        ["SkyCity_Backdrop"] = "the sky city",
+        ["BaubleMall"] = "the Bauble mall",
+        ["TrainstationPropsPreRaid"] = "trainstation interior where Faith lives, before the raid",
+    };
+
+    // Alternative states of something else: loaded, but start hidden so they do not overlap the
+    // normal version (SubWorldLoadFilter.StartsVisible).
+    private static readonly Dictionary<string, string> StartHidden = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["SkyCity_RuinBackdrop"] = "the sky city after the cutscene where its top blows up",
+        ["BaubleRuins"] = "the Bauble mall after it is blown up in a mission",
+        ["BaubleDestruction"] = "the Bauble being destroyed (assumed from the name)",
+        ["TrainstationPropsPostRaid"] = "trainstation interior after the raid",
+    };
+
+    /// <summary>Why a sub-world starts hidden although it is loaded (an alternative state); null if it does not.</summary>
+    public static string StartHiddenNote(string shortName) => StartHidden.TryGetValue(shortName, out string note) ? note : null;
+
+    /// <summary>What the sub-world is, when known, for the picker; null otherwise.</summary>
+    public static string Note(string shortName)
+    {
+        if (StartHidden.TryGetValue(shortName, out string hidden))
+            return hidden + "; starts hidden";
+        return Notes.TryGetValue(shortName, out string note) ? note : null;
+    }
 
     /// <summary>Folder of a level asset ("Levels/SP/SP_MainCity/SP_MainCity" → "Levels/SP/SP_MainCity/").</summary>
     public static string LevelFolder(string levelAssetName)
@@ -229,7 +261,8 @@ public static class SubWorldCatalog
         }
         if (n.StartsWith("VISTA", StringComparison.OrdinalIgnoreCase) || n.StartsWith("VisualEnvironment", StringComparison.OrdinalIgnoreCase)
             || Has(n, "Backdrop") || n.StartsWith("SkyCity", StringComparison.OrdinalIgnoreCase)
-            || n.StartsWith("LMS", StringComparison.Ordinal) || n.StartsWith("TrainstationProps", StringComparison.OrdinalIgnoreCase))
+            || n.StartsWith("LMS", StringComparison.Ordinal) || n.StartsWith("TrainstationProps", StringComparison.OrdinalIgnoreCase)
+            || n.StartsWith("Bauble", StringComparison.OrdinalIgnoreCase))
         {
             info.Category = SubWorldCategory.EnvironmentAndBackdrops;
             return info;

@@ -20,7 +20,10 @@ Found in the game's asset list (Frosty cache, 603 SubWorldData assets):
   `VisualEnvironments`, backdrops, `LMS…` whose purpose is not confirmed), `MainLogic`.
 
 Story and side mission names were matched against the released game's mission lists. "Other"
-holds what matches no pattern (`Aline`, `Jukebox`, `Bauble…`).
+holds what matches no pattern (`Aline`, `Jukebox`). Known from playing: `Backdrops` = far-away city
+structures, `SkyCity_Backdrop` = the sky city, `BaubleMall` = the Bauble mall,
+`TrainstationPropsPreRaid` / `PostRaid` = the trainstation interior where Faith lives, before and
+after the raid; these are under "Environment, backdrops and landmarks".
 
 ## In the editor
 
@@ -33,9 +36,16 @@ holds what matches no pattern (`Aline`, `Jukebox`, `Bauble…`).
   a level is opened the picker starts at City only; after that it starts at the saved choice.
 - **Load** saves the choice for that level and loads it. **Load everything** loads all sub-worlds
   this once without changing the saved choice.
-- "Show loaded mission and side content in the view": sub-worlds the game does not load at start
-  (AutoLoad off) used to be loaded but hidden in the Layers panel. With this ticked, the mission
-  and side content you load starts visible.
+- What starts visible: everything loaded, except mission and side content you did not choose to
+  show, `LMS…` sub-worlds (purpose unknown) and alternative states of something else:
+  `SkyCity_RuinBackdrop` (sky city after the cutscene where its top blows up), `BaubleRuins` /
+  `BaubleDestruction` (the Bauble mall destroyed), `TrainstationPropsPostRaid` (trainstation
+  interior after the raid). Switch those on in the Layers panel.
+  Before, only sub-worlds with AutoLoad on started visible. Nearly the whole MEC city has AutoLoad
+  off (the game streams it by position), so the city only appeared after switching the
+  SP_MainCity root layer off and on, which also showed every mission and every alternative state.
+- "Show loaded mission and side content in the view": with this ticked, the mission and side
+  content you pick starts visible; otherwise it is loaded but hidden.
 - "Ask each time a level is opened" off: the saved choice is used without asking. Change it with
   **Map > Sub-worlds to Load** (pick the level, Save; applies the next time the level is opened).
 - The log says which sub-worlds were left out ("SubWorlds" lines).

@@ -27,6 +27,7 @@ public static class SubWorldLoadFilter
     // set while a level is loading (read from the loading thread)
     private static volatile HashSet<string> activeExcluded;
     private static volatile HashSet<string> activeShown;
+    private static volatile bool levelLoadActive;
     private static readonly List<string> skipped = new List<string>();
 
     /// <summary>Show the picker each time a level is opened (default on).</summary>
@@ -80,6 +81,7 @@ public static class SubWorldLoadFilter
             skipped.Clear();
         activeExcluded = excluded != null && excluded.Count > 0 ? new HashSet<string>(excluded, StringComparer.OrdinalIgnoreCase) : null;
         activeShown = shown != null && shown.Count > 0 ? new HashSet<string>(shown, StringComparer.OrdinalIgnoreCase) : null;
+        levelLoadActive = true;
     }
 
     /// <summary>Stops applying the choice and logs what was left out.</summary>
@@ -88,6 +90,7 @@ public static class SubWorldLoadFilter
         bool wasActive = activeExcluded != null;
         activeExcluded = null;
         activeShown = null;
+        levelLoadActive = false;
         if (!wasActive)
             return;
 
@@ -110,10 +113,42 @@ public static class SubWorldLoadFilter
         return true;
     }
 
-    /// <summary>True when a loaded sub-world should start visible although the game does not load it at start.</summary>
-    public static bool ShouldShow(string subWorldName)
+    /// <summary>
+    /// Whether a loaded sub-world's layer starts visible in the Layers panel and the view.
+    ///
+    /// Before, only sub-worlds with AutoLoad on started visible. In MEC nearly the whole city has
+    /// AutoLoad off because the game streams it by player position (the 341 zone-streamed
+    /// pieces, districts, backdrops, landmarks), so a freshly opened SP_MainCity showed almost
+    /// nothing until its root layer was switched off and on (which shows everything, including
+    /// every mission and both versions of destroyed landmarks). Now, while a level is being
+    /// opened, a sub-world starts visible when:
+    ///  - the game loads it at start (AutoLoad), or it is zone-streamed (part of the city), or
+    ///  - it is base content (city geometry, districts, characters, environment, landmarks, logic,
+    ///    other), except alternative states such as the ruined sky city or the trainstation after
+    ///    the raid (SubWorldCatalog.StartHiddenNote), and LMS… sub-worlds (purpose unknown), or
+    ///  - it is mission or side content picked in Sub-worlds to Load with "Show loaded mission and
+    ///    side content" ticked.
+    /// Outside a level load (other editors) the old rule applies: visible when AutoLoad is on.
+    /// </summary>
+    public static bool StartsVisible(string subWorldName, bool autoLoad, bool zoneStreamed)
     {
+        if (autoLoad || zoneStreamed)
+            return true;
+        if (!levelLoadActive || string.IsNullOrEmpty(subWorldName))
+            return autoLoad;
+
+        string shortName = SubWorldCatalog.ShortNameOf(subWorldName);
+        if (SubWorldCatalog.StartHiddenNote(shortName) != null)
+            return false;
+
         HashSet<string> shown = activeShown;
-        return shown != null && !string.IsNullOrEmpty(subWorldName) && shown.Contains(subWorldName);
+        if (shown != null && shown.Contains(subWorldName))
+            return true;
+
+        if (SubWorldCatalog.Info(SubWorldCatalog.Classify(subWorldName).Category).IsOptionalContent)
+            return false;
+        if (shortName.StartsWith("LMS", StringComparison.Ordinal))
+            return false;
+        return true;
     }
 }
