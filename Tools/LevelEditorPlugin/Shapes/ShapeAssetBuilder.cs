@@ -84,13 +84,16 @@ public sealed class ShapeResult
 ///     temporary FBX and read with Frosty's normal FBX importer), new bounds, no occluder mesh;
 ///  2. a mesh variation database entry for it in the target bundle's database (the surface
 ///     mesh's entry, pointed at the new mesh), which is where MEC takes a mesh's textures from;
-///  3. a new SpatialPrefabBlueprint holding a static model of the new mesh and, optionally, one
+///  3. a new ObjectBlueprint for the model: a copy of the game's prop blueprint that uses the
+///     surface mesh (else any static-model ObjectBlueprint), with the new mesh, without Havok
+///     physics (a static model placed directly in the prefab was invisible in game);
+///  4. a new SpatialPrefabBlueprint holding a reference to that blueprint and, optionally, one
 ///     PamOBBCollisionEntity per collision box (MEC's box collision; walkable, verified in game);
-///  4. a reference to the prefab placed in the target layer (through SpawnUtil: undo, network
+///  5. a reference to the prefab placed in the target layer (through SpawnUtil: undo, network
 ///     registries, entity and render proxies), plus anything the new assets need added to the
 ///     target bundle (BundleAdder, assets + resources + chunks).
 ///
-/// Field values of the static model and the collision boxes are copied from existing objects of
+/// Field values of the collision boxes are copied from existing objects of
 /// the loaded level (realm flags, collision layer, surface material, …) instead of zero defaults.
 /// Undo removes the placed object; the new assets stay in the project.
 /// </summary>
@@ -167,8 +170,17 @@ public static partial class ShapeAssetBuilder
         }
         probe.Phase("variation entry");
 
-        // 3. prefab
-        EbxAssetEntry prefabEntry = CreatePrefab(prefabName, bundle, meshEntry, meshAsset, boxes, options, templates);
+        // 3. model: a copy of a game ObjectBlueprint (the surface's own prop when there is one) with
+        //    the new mesh and no Havok physics. A static model placed directly in the prefab (as
+        //    before) was invisible in game even with an unchanged game mesh; the blueprint way was
+        //    verified in game (visibility test, 2026-11-11).
+        EbxAssetEntry modelSource = FindModelBlueprint(templateMesh)
+            ?? throw new InvalidOperationException("No ObjectBlueprint with a static model was found to copy for the shape's model.");
+        EbxAssetEntry modelEntry = CopyBlueprint(modelSource, prefabName + "_model", bundle, meshEntry, meshAsset, false);
+        probe.Phase("model");
+
+        // 4. prefab: a reference to the model plus the collision boxes
+        EbxAssetEntry prefabEntry = CreateReferencePrefab(prefabName, bundle, modelEntry, boxes, options, templates);
         probe.Phase("prefab");
 
         // 4. what the new assets use (shaders, textures, …) and placing
@@ -188,6 +200,7 @@ public static partial class ShapeAssetBuilder
             HashSet<int> loaded = check.LoadedBundles ?? new HashSet<int>();
             bundleNote = BundleAdder.AddWithDependencies(meshEntry, bundle, loaded).ToString();
             // and from the prefab: what the collision boxes' physics bodies use
+            bundleNote += "; " + BundleAdder.AddWithDependencies(modelEntry, bundle, loaded).ToString();
             bundleNote += "; " + BundleAdder.AddWithDependencies(prefabEntry, bundle, loaded).ToString();
         }
         finally
@@ -199,7 +212,7 @@ public static partial class ShapeAssetBuilder
         Entity placed = SpawnUtil.Spawn(prefabEntry, target, screen, false, out _, placement);
         probe.Phase("place");
 
-        string summary = $"Created {prefabName} (mesh: {options.MeshSource}, {meshEntry.Name}; {geometry.TriangleCount} triangles, {boxes.Count} collision box(es), surface {surface}) in {targetEntry.Name}; {variationNote}; bundles: {bundleNote}";
+        string summary = $"Created {prefabName} (model blueprint copied from {modelSource.Name}; mesh: {options.MeshSource}, {meshEntry.Name}; {geometry.TriangleCount} triangles, {boxes.Count} collision box(es), surface {surface}) in {targetEntry.Name}; {variationNote}; bundles: {bundleNote}";
         LevelEditorLog.Info("Shapes", summary);
         return new ShapeResult { Prefab = prefabEntry, Mesh = meshEntry, Placed = placed, Summary = summary };
     }
@@ -424,39 +437,20 @@ public static partial class ShapeAssetBuilder
 
     // --- prefab ----------------------------------------------------------------------------
 
-    private static EbxAssetEntry CreatePrefab(string name, int bundle, EbxAssetEntry meshEntry, EbxAsset meshAsset, List<CollisionBox> boxes, ShapeOptions options, Templates templates)
+    private static EbxAssetEntry fallbackModelBlueprint;
+
+    /// <summary>
+    /// The ObjectBlueprint to copy for a shape's model: the game's prop that uses the surface mesh,
+    /// else any ObjectBlueprint whose Object is a static model.
+    /// </summary>
+    private static EbxAssetEntry FindModelBlueprint(EbxAssetEntry surfaceMesh)
     {
-        dynamic root = TypeLibrary.CreateObject("SpatialPrefabBlueprint");
-        EbxAsset asset = new EbxAsset(root);
-        Guid fileGuid = NewEbxGuid();
-        asset.SetFileGuid(fileGuid);
-        root.Name = name;
-        ApplyPrefabHeader(root, templates);
-
-        // the static model, with copies of its internal objects. Earlier versions dropped them: the
-        // template's one component went missing while its Client/ServerRuntimeComponentCount and
-        // PhysicsPartInfos still counted it, and the model was invisible in game (also with an
-        // unchanged game mesh) or the game crashed on load. The template is preferably a model
-        // without components, physics part infos and part links (see Templates).
-        object model = templates.StaticModel != null
-            ? CopyWithInternals(templates.StaticModel, asset)
-            : TypeLibrary.CreateObject(TypeLibrary.GetType("PamStaticModelEntityData") != null ? "PamStaticModelEntityData" : "StaticModelEntityData");
-        dynamic m = model;
-        m.Mesh = new PointerRef(new EbxImportReference { FileGuid = meshEntry.Guid, ClassGuid = ((dynamic)meshAsset.RootObject).GetInstanceGuid().ExportedGuid });
-        m.PhysicsData = new PointerRef(); // no Havok physics: collision comes from the boxes
-        m.Transform = Entity.MakeLinearTransform(Matrix.Identity);
-        MeshUtil.SetIfPresent(model, "Visible", true);
-        MeshUtil.SetIfPresent(model, "Enabled", true);
-        MeshUtil.SetIfPresent(model, "BoneCount", 0u);
-        ApplyParkourFlags(model, options);
-        AddChild(asset, root, model, HighFlags(templates.StaticModel));
-
-        AddBoxes(asset, root, boxes, options, templates);
-
-        asset.Update();
-        EbxAssetEntry entry = App.AssetManager.AddEbx(name, asset, bundle);
-        App.AssetManager.ModifyEbx(name, asset);
-        return entry;
+        EbxAssetEntry own = App.AssetManager.EnumerateEbx("ObjectBlueprint").FirstOrDefault(e => e.ContainsDependency(surfaceMesh.Guid) && StaticModelOf(e) != null);
+        if (own != null)
+            return own;
+        if (fallbackModelBlueprint == null || App.AssetManager.GetEbxEntry(fallbackModelBlueprint.Guid) == null)
+            fallbackModelBlueprint = App.AssetManager.EnumerateEbx("ObjectBlueprint").Where(e => !e.Name.Contains("/" + FolderName + "/")).Take(2000).FirstOrDefault(e => StaticModelOf(e) != null);
+        return fallbackModelBlueprint;
     }
 
     private static void AddBoxes(EbxAsset asset, dynamic root, List<CollisionBox> boxes, ShapeOptions options, Templates templates)

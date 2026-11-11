@@ -43,8 +43,11 @@ Per shape, in `<level folder>/LevelEditorShapes/` (for SP_MainCity:
   which handles MEC's vertex formats. All LODs get the same geometry.
 - **Mesh variation entry:** the surface mesh's entry, pointed at the new mesh, added to the
   target bundle's mesh variation database (MEC takes a mesh's textures from there).
-- **Prefab** (SpatialPrefabBlueprint) with one static model (PamStaticModelEntityData, no Havok
-  physics) and one PamOBBCollisionEntityData per collision box. Their field values (collision
+- **Model** (`..._model`, ObjectBlueprint): a copy of the game prop blueprint that uses the
+  surface mesh (else any static-model ObjectBlueprint), pointed at the new mesh, without Havok
+  physics.
+- **Prefab** (SpatialPrefabBlueprint) with a reference to the model and one
+  PamOBBCollisionEntityData per collision box. Their field values (collision
   layer, surface material, …) are copied from existing objects of the open level; each collision
   box also gets a copy of that object's physics body (RigidBodyData), preferably one without a
   baked Havok shape. Flags get only the new id bits (no connection realm bits).
@@ -113,6 +116,13 @@ existing one). Per shape:
   the blueprint; 4 the copy without PhysicsData; 5 the copy with the generated mesh; 6 a new
   prefab referencing 5 plus collision boxes. Which numbers show in game tells which step hides
   the model.
+- d8ebc33 result: all six test objects show in game, including 6 (new prefab → copied game
+  blueprint with the generated mesh). A shape made the old way (static model directly in the
+  prefab) is still invisible. The game prop's model is a `StaticModelEntityData` inside its
+  ObjectBlueprint; the standalone template was a `PamStaticModelEntityData`. Fix: shapes are now
+  built like test object 6: `ShapeNNN_<..>_model` (ObjectBlueprint, copy of the surface's game
+  prop blueprint, else any static-model ObjectBlueprint, with the new mesh and no physics) and
+  the `ShapeNNN_<..>` prefab with a reference to it plus the collision boxes.
 
 ## Checked so far
 
