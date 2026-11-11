@@ -24,6 +24,14 @@ Code: `Tools/LevelEditorPlugin/Shapes/`.
 Do not resize shapes with the scale gizmo: collision boxes may not follow a scale in game.
 Make a new one with the size you want instead.
 
+**Delete all shapes…** takes every shape out of the project (placed shapes, their network
+registry and mesh variation entries, and the shape assets). Use it when a shape breaks the
+game: deleting only the placed object leaves the shape's assets in the level's bundle, where the
+game still loads them. Save the project and reopen the level afterwards.
+
+Avoid special materials (water, glass, decals, emissive, sky…): their shaders may need more than
+plain geometry. The window warns when a surface's name suggests one.
+
 ## What gets created
 
 Per shape, in `<level folder>/LevelEditorShapes/` (for SP_MainCity:
@@ -36,8 +44,10 @@ Per shape, in `<level folder>/LevelEditorShapes/` (for SP_MainCity:
 - **Mesh variation entry:** the surface mesh's entry, pointed at the new mesh, added to the
   target bundle's mesh variation database (MEC takes a mesh's textures from there).
 - **Prefab** (SpatialPrefabBlueprint) with one static model (PamStaticModelEntityData, no Havok
-  physics) and one PamOBBCollisionEntityData per collision box. Their other field values (realm
-  flags, collision layer, surface material) are copied from existing objects of the open level.
+  physics) and one PamOBBCollisionEntityData per collision box. Their field values (collision
+  layer, surface material, …) are copied from existing objects of the open level; each collision
+  box also gets a copy of that object's physics body (RigidBodyData), preferably one without a
+  baked Havok shape. Flags get only the new id bits (no connection realm bits).
 - **Placed reference** to the prefab in the target layer (undo, network registries as for placed
   props).
 - **Bundles:** everything is added to the target layer's bundle, plus what it uses (shaders,
@@ -59,6 +69,14 @@ existing one). Per shape:
 | Stairs | one box per step, from the floor to the step's top |
 | Cylinder | one box per pair of opposite sides, together covering the cylinder |
 | Corner | one box per arm |
+
+## History
+
+- 993da38 (first version): shapes worked in the editor, but MEC crashed without an error on the
+  loading screen. Suspects fixed in the next version: collision boxes without their physics body
+  (the copy dropped the RigidBodyData the box's `PhysicsBodies` points to), and Flags high bits
+  copied from a level object (realm bits of connections the new objects do not have). The test
+  shape also used a water plane material.
 
 ## Checked so far
 

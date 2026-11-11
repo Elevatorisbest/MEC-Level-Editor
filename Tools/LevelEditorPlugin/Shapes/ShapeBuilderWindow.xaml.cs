@@ -149,9 +149,10 @@ public partial class ShapeBuilderWindow : FrostyDockableWindow
         }
 
         ShapeSurface surface = ComboBox_Surface.SelectedItem as ShapeSurface;
+        string warning = surface == null ? null : SurfaceWarning(surface);
         Text_SurfaceInfo.Text = surface == null
             ? "No surface yet: select an object in the level and press 'From selected object'."
-            : $"Material '{surface.SectionName}' of {surface.MeshName}";
+            : $"Material '{surface.SectionName}' of {surface.MeshName}" + (warning != null ? "\n" + warning : "");
     }
 
     private static float Snap(float value, float step) => step > 0 ? (float)(Math.Round(value / step) * step) : value;
@@ -277,6 +278,18 @@ public partial class ShapeBuilderWindow : FrostyDockableWindow
         return result;
     }
 
+    /// <summary>Surfaces from special meshes (water, glass, decals, …) use shaders that may need more than plain geometry.</summary>
+    internal static string SurfaceWarning(ShapeSurface surface)
+    {
+        string name = (surface.MeshName + " " + surface.SectionName).ToLowerInvariant();
+        foreach (string word in new[] { "water", "glass", "decal", "emissive", "light", "ui/", "fx", "vista", "sky", "cloud", "foliage", "cable", "wire" })
+        {
+            if (name.Contains(word))
+                return $"Warning: this looks like a special material ('{word}'); its shader may not work on a plain shape. Prefer a wall, floor or crate material.";
+        }
+        return null;
+    }
+
     private static List<ShapeSurface> LoadRecentSurfaces()
     {
         string text = Config.Get(RecentSurfacesKey, "", ConfigScope.Game);
@@ -355,6 +368,21 @@ public partial class ShapeBuilderWindow : FrostyDockableWindow
         finally
         {
             Button_Create.IsEnabled = true;
+        }
+    }
+
+    private void Button_RemoveAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (FrostyMessageBox.Show("Delete every shape from this project?\n\nPlaced shapes, their mesh variation entries and all shape assets are removed. Afterwards save the project and reopen the level.", "Shape Builder", MessageBoxButton.YesNo) != MessageBoxResult.Yes)
+            return;
+        try
+        {
+            Text_Status.Text = ShapeCleanup.RemoveAll();
+        }
+        catch (Exception ex)
+        {
+            Text_Status.Text = "Could not delete the shapes: " + ex.Message;
+            LevelEditorLog.Error("Shapes", "Deleting all shapes failed", ex);
         }
     }
 

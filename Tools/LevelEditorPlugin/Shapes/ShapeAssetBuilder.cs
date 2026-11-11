@@ -156,6 +156,8 @@ public static class ShapeAssetBuilder
             // template's shaders and textures. The prefab itself is already in the bundle.
             HashSet<int> loaded = check.LoadedBundles ?? new HashSet<int>();
             bundleNote = BundleAdder.AddWithDependencies(meshEntry, bundle, loaded).ToString();
+            // and from the prefab: what the collision boxes' physics bodies use
+            bundleNote += "; " + BundleAdder.AddWithDependencies(prefabEntry, bundle, loaded).ToString();
         }
         finally
         {
@@ -371,7 +373,8 @@ public static class ShapeAssetBuilder
             MeshUtil.SetIfPresent(root, "TimeDeltaType", ((dynamic)templates.Prefab).TimeDeltaType);
         }
 
-        // the static model
+        // the static model (its internal objects, such as Havok physics made for the source's own
+        // mesh, are left out)
         object model = templates.StaticModel != null
             ? DataCopy.CopyEntityData(templates.StaticModel, PointerRefPolicy)
             : TypeLibrary.CreateObject(TypeLibrary.GetType("PamStaticModelEntityData") != null ? "PamStaticModelEntityData" : "StaticModelEntityData");
@@ -383,20 +386,23 @@ public static class ShapeAssetBuilder
         MeshUtil.SetIfPresent(model, "Enabled", true);
         MeshUtil.SetIfPresent(model, "BoneCount", 0u);
         ApplyParkourFlags(model, options);
-        AddChild(asset, root, model, templates.StaticModel);
+        AddChild(asset, root, model);
 
         // the collision boxes
         foreach (CollisionBox box in boxes)
         {
+            // the collision box keeps copies of its own internal objects: its PhysicsBodies entry
+            // (a RigidBodyData: realm, collision layer, physics material, motion type) is how the
+            // game makes the collision. Dropping it (first version) likely crashed MEC on load.
             object obb = templates.Collision != null
-                ? DataCopy.CopyEntityData(templates.Collision, PointerRefPolicy)
+                ? CopyWithInternals(templates.Collision, asset)
                 : TypeLibrary.CreateObject("PamOBBCollisionEntityData");
             dynamic o = obb;
             o.Transform = Entity.MakeLinearTransform(box.Transform);
             o.HalfExtents = new FrostySdk.Ebx.Vec3 { x = box.HalfExtents.X, y = box.HalfExtents.Y, z = box.HalfExtents.Z };
             MeshUtil.SetIfPresent(obb, "Enabled", true);
             ApplyParkourFlags(obb, options);
-            AddChild(asset, root, obb, templates.Collision);
+            AddChild(asset, root, obb);
         }
 
         asset.Update();
@@ -417,22 +423,66 @@ public static class ShapeAssetBuilder
     private static PointerRef PointerRefPolicy(PointerRef pointer) =>
         pointer.Type == PointerRefType.Internal ? new PointerRef() : pointer;
 
-    private static void AddChild(EbxAsset asset, dynamic root, object data, object source)
+    private static void AddChild(EbxAsset asset, dynamic root, object data)
+    {
+        AddObject(asset, data);
+        root.Objects.Add(new PointerRef(data));
+    }
+
+    /// <summary>
+    /// Gives an object a new instance id and adds it to the asset. Flags get only the id bits (as
+    /// CoreUtil.CreateClassObjectRef does for placed objects, which work in game): the high bits
+    /// describe the realms of the object's property/event/link connections (see ReferenceObject),
+    /// and new shape objects have none. The first version copied them from a level object
+    /// (0x1F……), a suspect for the game crashing on load.
+    /// </summary>
+    private static void AddObject(EbxAsset asset, object data)
     {
         Type type = data.GetType();
         AssetClassGuid guid = new AssetClassGuid(FrostySdk.Utils.GenerateDeterministicGuid(asset.Objects, type, asset.FileGuid), -1);
         ((dynamic)data).SetInstanceGuid(guid);
         if (TypeLibrary.IsSubClassOf(data, "DataBusPeer"))
         {
-            // low 24 bits: id from the instance guid (as CoreUtil.CreateClassObjectRef); high bits
-            // (realm and other flags) from the object it was copied from
             byte[] bytes = guid.ExportedGuid.ToByteArray();
             uint id = (uint)((bytes[2] << 16) | (bytes[1] << 8) | bytes[0]);
-            uint high = source != null ? (uint)((dynamic)source).Flags & 0xFF000000u : 0u;
-            type.GetProperty("Flags", BindingFlags.Public | BindingFlags.Instance)?.SetValue(data, high | id);
+            type.GetProperty("Flags", BindingFlags.Public | BindingFlags.Instance)?.SetValue(data, id);
         }
         asset.AddObject(data);
-        root.Objects.Add(new PointerRef(data));
+    }
+
+    /// <summary>
+    /// Copies an object and every object of its own file it points to (recursively), adding the
+    /// copies to <paramref name="asset"/> with new ids. References to other assets are kept.
+    /// </summary>
+    private static object CopyWithInternals(object source, EbxAsset asset)
+    {
+        Dictionary<object, object> copies = new Dictionary<object, object>(ReferenceEqualityComparer.Instance);
+        int depth = 0;
+        PointerRef Pointer(PointerRef pointer)
+        {
+            if (pointer.Type != PointerRefType.Internal)
+                return pointer;
+            object target = pointer.Internal;
+            if (copies.TryGetValue(target, out object existing))
+                return existing == null ? new PointerRef() : new PointerRef(existing);
+            if (depth > 16)
+                return new PointerRef();
+            copies[target] = null; // cycle guard: a reference back while copying becomes null
+            depth++;
+            object copy = DataCopy.DeepCopy(target, Pointer);
+            depth--;
+            AddObject(asset, copy);
+            copies[target] = copy;
+            return new PointerRef(copy);
+        }
+        return DataCopy.DeepCopy(source, Pointer);
+    }
+
+    private sealed class ReferenceEqualityComparer : IEqualityComparer<object>
+    {
+        public static readonly ReferenceEqualityComparer Instance = new ReferenceEqualityComparer();
+        public new bool Equals(object x, object y) => ReferenceEquals(x, y);
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 
     // --- templates from the loaded level ---------------------------------------------------
@@ -488,7 +538,19 @@ public static class ShapeAssetBuilder
                     dynamic d = data;
                     int score = 0;
                     try { if ((bool)d.Enabled) score += 2; } catch (Exception) { }
-                    try { if (((IList)d.PhysicsBodies).Count == 0) score += 1; } catch (Exception) { }
+                    try
+                    {
+                        // a physics body whose own Asset is empty (shape from HalfExtents) is what a
+                        // resized box needs; a body with a baked Havok asset would keep its shape
+                        IList bodies = (IList)d.PhysicsBodies;
+                        if (bodies.Count == 1 && bodies[0] is PointerRef body && body.Type == PointerRefType.Internal)
+                        {
+                            score += 1;
+                            if (((PointerRef)((dynamic)body.Internal).Asset).Type == PointerRefType.Null)
+                                score += 8;
+                        }
+                    }
+                    catch (Exception) { }
                     try { if (!(bool)d.CantStand && !(bool)d.CantClimb && !(bool)d.CantVault && !(bool)d.CantWallrun) score += 4; } catch (Exception) { }
                     if (score > bestCollision)
                     {
@@ -515,7 +577,25 @@ public static class ShapeAssetBuilder
             try
             {
                 dynamic d = data;
-                string extra = data.GetType().Name == "PamOBBCollisionEntityData" ? $", {((IList)d.PhysicsBodies).Count} physics bodies, layer {d.CollisionLayer}" : "";
+                string extra = "";
+                if (data.GetType().Name == "PamOBBCollisionEntityData")
+                {
+                    extra = $", {((IList)d.PhysicsBodies).Count} physics bodies, layer {d.CollisionLayer}, half extents {d.HalfExtents.x}/{d.HalfExtents.y}/{d.HalfExtents.z}";
+                    foreach (object item in (IList)d.PhysicsBodies)
+                    {
+                        if (item is PointerRef body && body.Type == PointerRefType.Internal)
+                        {
+                            dynamic b = body.Internal;
+                            PointerRef bodyAsset = b.Asset;
+                            string assetText = bodyAsset.Type == PointerRefType.Null ? "none" : bodyAsset.Type == PointerRefType.External ? $"external {App.AssetManager.GetEbxEntry(bodyAsset.External.FileGuid)?.Name ?? bodyAsset.External.FileGuid.ToString()}" : $"internal {bodyAsset.Internal?.GetType().Name}";
+                            extra += $"; body {body.Internal.GetType().Name} realm {b.Realm}, layer {b.CollisionLayer}, motion {b.MotionType}, asset {assetText}";
+                        }
+                        else if (item is PointerRef other)
+                        {
+                            extra += $"; body ref {other.Type}";
+                        }
+                    }
+                }
                 return $"{data.GetType().Name} flags 0x{(uint)d.Flags:X8}{extra}";
             }
             catch (Exception)

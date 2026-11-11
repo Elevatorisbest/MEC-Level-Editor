@@ -177,9 +177,14 @@
         <Border Grid.Row="1" Padding="12,8" Background="#202020">
             <StackPanel>
                 <TextBlock x:Name="Text_Status" Margin="0,0,0,6" TextWrapping="Wrap" />
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                    <Button x:Name="Button_Create" Click="Button_Create_Click" Content="Create in front of the camera" IsDefault="True" />
-                </StackPanel>
+                <DockPanel LastChildFill="False">
+                    <Button
+                        DockPanel.Dock="Left"
+                        Click="Button_RemoveAll_Click"
+                        Content="Delete all shapes…"
+                        ToolTip="Takes every shape out of the project: placed shapes, their mesh variation entries and the shape assets. Use it when a shape breaks the game: deleting only the placed object leaves its assets in the level's bundle." />
+                    <Button x:Name="Button_Create" DockPanel.Dock="Right" Click="Button_Create_Click" Content="Create in front of the camera" IsDefault="True" />
+                </DockPanel>
             </StackPanel>
         </Border>
     </Grid>
