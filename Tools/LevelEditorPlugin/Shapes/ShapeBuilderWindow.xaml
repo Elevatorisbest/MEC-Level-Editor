@@ -1,0 +1,186 @@
+<ctrl:FrostyDockableWindow
+    x:Class="LevelEditorPlugin.Shapes.ShapeBuilderWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctrl="clr-namespace:Frosty.Controls;assembly=FrostyControls"
+    Title="Shape Builder"
+    Width="460"
+    Height="780"
+    MinWidth="420"
+    MinHeight="560"
+    Closing="Window_Closing"
+    ResizeMode="CanResize"
+    WindowStartupLocation="CenterScreen">
+
+    <ctrl:FrostyDockableWindow.Resources>
+        <Style BasedOn="{StaticResource {x:Type CheckBox}}" TargetType="{x:Type CheckBox}">
+            <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+            <Setter Property="Padding" Value="5,0,0,0" />
+            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style BasedOn="{StaticResource {x:Type Button}}" TargetType="{x:Type Button}">
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Height" Value="24" />
+        </Style>
+        <Style x:Key="Heading" TargetType="{x:Type TextBlock}">
+            <Setter Property="Margin" Value="0,10,0,4" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="Hint" TargetType="{x:Type TextBlock}">
+            <Setter Property="Foreground" Value="#A0A0A0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,0,2" />
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="{x:Type TextBlock}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+        </Style>
+        <Style x:Key="Field" TargetType="{x:Type TextBox}">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!--  segmented buttons, as in the asset browser  -->
+        <Style TargetType="{x:Type RadioButton}">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Foreground" Value="#B8B8B8" />
+            <Setter Property="Background" Value="#262626" />
+            <Setter Property="BorderBrush" Value="#454545" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RadioButton}">
+                        <Border
+                            x:Name="segment"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1">
+                            <Grid>
+                                <ContentPresenter
+                                    x:Name="contentPresenter"
+                                    Margin="{TemplateBinding Padding}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                    Focusable="False"
+                                    RecognizesAccessKey="True" />
+                                <Rectangle
+                                    x:Name="accent"
+                                    Height="2"
+                                    VerticalAlignment="Bottom"
+                                    Fill="{StaticResource SubMenuItemHighlight}"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#333333" />
+                                <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+                                <Setter Property="Panel.ZIndex" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="{StaticResource ControlBackground}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource ControlHighlight}" />
+                                <Setter Property="Foreground" Value="{StaticResource FontColor}" />
+                                <Setter Property="Panel.ZIndex" Value="2" />
+                                <Setter TargetName="accent" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ctrl:FrostyDockableWindow.Resources>
+
+    <Grid Background="#141414" TextElement.Foreground="#F8F8F8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="12,4,12,12">
+
+                <TextBlock Style="{StaticResource Heading}" Text="Shape" />
+                <WrapPanel x:Name="Panel_Kinds" />
+
+                <TextBlock Style="{StaticResource Heading}" Text="Size (metres)" />
+                <Grid x:Name="Grid_Sizes">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="Label_Width" Grid.Row="0" Style="{StaticResource FieldLabel}" Text="Width (X)" />
+                    <TextBox x:Name="TextBox_Width" Grid.Row="0" Grid.Column="1" Style="{StaticResource Field}" Text="4" TextChanged="Field_Changed" />
+                    <TextBlock x:Name="Label_Height" Grid.Row="1" Style="{StaticResource FieldLabel}" Text="Height (Y)" />
+                    <TextBox x:Name="TextBox_Height" Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" Text="1" TextChanged="Field_Changed" />
+                    <TextBlock x:Name="Label_Depth" Grid.Row="2" Style="{StaticResource FieldLabel}" Text="Depth (Z)" />
+                    <TextBox x:Name="TextBox_Depth" Grid.Row="2" Grid.Column="1" Style="{StaticResource Field}" Text="4" TextChanged="Field_Changed" />
+                    <TextBlock x:Name="Label_Steps" Grid.Row="3" Style="{StaticResource FieldLabel}" Text="Steps" />
+                    <TextBox x:Name="TextBox_Steps" Grid.Row="3" Grid.Column="1" Style="{StaticResource Field}" Text="8" TextChanged="Field_Changed" />
+                    <TextBlock x:Name="Label_Segments" Grid.Row="4" Style="{StaticResource FieldLabel}" Text="Sides" />
+                    <TextBox x:Name="TextBox_Segments" Grid.Row="4" Grid.Column="1" Style="{StaticResource Field}" Text="16" TextChanged="Field_Changed" />
+                    <TextBlock x:Name="Label_Thickness" Grid.Row="5" Style="{StaticResource FieldLabel}" Text="Arm thickness" />
+                    <TextBox x:Name="TextBox_Thickness" Grid.Row="5" Grid.Column="1" Style="{StaticResource Field}" Text="1" TextChanged="Field_Changed" />
+                    <TextBlock Grid.Row="6" Style="{StaticResource FieldLabel}" Text="Round sizes to" />
+                    <ComboBox x:Name="ComboBox_Snap" Grid.Row="6" Grid.Column="1" Height="22" Margin="0,2" SelectionChanged="Field_Changed" />
+                </Grid>
+                <TextBlock x:Name="Text_ShapeInfo" Style="{StaticResource Hint}" />
+
+                <TextBlock Style="{StaticResource Heading}" Text="Surface" />
+                <TextBlock Style="{StaticResource Hint}" Text="The look comes from a material of an existing mesh. Select an object in the level whose surface you want (a wall, a floor, a crate), then pick one of its materials. Tiling materials (walls, floors, concrete, metal) work best." />
+                <DockPanel Margin="0,4,0,2" LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="Button_FromSelection_Click" Content="From selected object" />
+                    <ComboBox x:Name="ComboBox_Surface" Height="24" SelectionChanged="Field_Changed" ToolTip="Material used for the shape. Recently used ones are kept in the list." />
+                </DockPanel>
+                <TextBlock x:Name="Text_SurfaceInfo" Style="{StaticResource Hint}" />
+                <DockPanel Margin="0,4,0,0">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="Texture repeats every (m)" />
+                    <TextBox x:Name="TextBox_TextureScale" Style="{StaticResource Field}" Text="2" TextChanged="Field_Changed" ToolTip="World-scale texturing: the material's texture repeats every this many metres on every face, whatever the shape's size." />
+                </DockPanel>
+
+                <TextBlock Style="{StaticResource Heading}" Text="Collision and movement" />
+                <CheckBox x:Name="CheckBox_Collision" Content="Collision (PamOBBCollision boxes)" IsChecked="True" ToolTip="Adds MEC collision boxes matching the shape: one box for a box, a tilted slab for a ramp, a box per step for stairs." />
+                <CheckBox x:Name="CheckBox_CantStand" Content="Can't stand on it" />
+                <CheckBox x:Name="CheckBox_CantClimb" Content="Can't climb it" />
+                <CheckBox x:Name="CheckBox_CantVault" Content="Can't vault over it" />
+                <CheckBox x:Name="CheckBox_CantWallrun" Content="Can't wallrun on it" />
+
+                <TextBlock Style="{StaticResource Heading}" Text="Place" />
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="Radio_TargetRoot" Content="Into the level root" GroupName="Target" IsChecked="True" ToolTip="The level's own blueprint: always loaded while the level is." />
+                    <RadioButton x:Name="Radio_TargetSame" Margin="-1,0,0,0" Content="Into the selected object's layer" GroupName="Target" ToolTip="The layer or sub-world that holds the selected object. Zone-streamed sub-worlds unload with the player's position." />
+                </StackPanel>
+                <DockPanel Margin="0,6,0,0">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="Distance in front of the camera (m)" />
+                    <TextBox x:Name="TextBox_Distance" Style="{StaticResource Field}" Text="auto" ToolTip="'auto' = far enough to see the whole shape." />
+                </DockPanel>
+                <CheckBox x:Name="CheckBox_FaceCamera" Content="Turn it to face away from the camera (in 90° steps)" IsChecked="True" ToolTip="Ramps and stairs then rise away from you." />
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="1" Padding="12,8" Background="#202020">
+            <StackPanel>
+                <TextBlock x:Name="Text_Status" Margin="0,0,0,6" TextWrapping="Wrap" />
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                    <Button x:Name="Button_Create" Click="Button_Create_Click" Content="Create in front of the camera" IsDefault="True" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</ctrl:FrostyDockableWindow>

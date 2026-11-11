@@ -168,7 +168,8 @@ public static class SpawnUtil
             return BundleAdder.AddWithDependencies(blueprint, bundle, check.LoadedBundles).ToString();
     }
 
-    public static Entity Spawn(EbxAssetEntry blueprint, SpawnTarget target, LevelEditorScreen screen, bool addMissingToBundle, out string bundleNote)
+    /// <param name="placement">World transform for the new object; null = at the camera.</param>
+    public static Entity Spawn(EbxAssetEntry blueprint, SpawnTarget target, LevelEditorScreen screen, bool addMissingToBundle, out string bundleNote, SharpDX.Matrix? placement = null)
     {
         SpawnCheck check = Check(blueprint, target);
         if (!check.CanSpawn)
@@ -202,6 +203,22 @@ public static class SpawnUtil
         transform.Translate.y = transform.trans.y;
         transform.Translate.z = transform.trans.z;
         transform.Scale.x = 1; transform.Scale.y = 1; transform.Scale.z = 1;
+        if (placement.HasValue)
+        {
+            // world placement converted to the target's space (the target may be an offset sub-world or layer)
+            SharpDX.Matrix local = placement.Value;
+            if (target.Root is ISpatialEntity parentSpatial)
+            {
+                SharpDX.Matrix parentWorld = parentSpatial.GetTransform();
+                if (System.Math.Abs(parentWorld.Determinant()) > 1e-12f)
+                    local = placement.Value * SharpDX.Matrix.Invert(parentWorld);
+            }
+            transform = Entity.MakeLinearTransform(local);
+            transform.Translate.x = transform.trans.x;
+            transform.Translate.y = transform.trans.y;
+            transform.Translate.z = transform.trans.z;
+            transform.Scale.x = 1; transform.Scale.y = 1; transform.Scale.z = 1;
+        }
 
         obj.BlueprintTransform = transform;
         obj.Blueprint = new PointerRef(new EbxImportReference { FileGuid = blueprint.Guid, ClassGuid = blueprintRootGuid });

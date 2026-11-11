@@ -68,6 +68,9 @@ public class StaticModelGroupElementEntity : Entity, IEntityData<StaticModelGrou
     private Assets.ObjectBlueprint blueprint;
     private Entity entity;
 
+    /// <summary>The entity made from the member's blueprint (usually a StaticModelEntity).</summary>
+    public Entity Inner => entity;
+
     public StaticModelGroupElementEntity(StaticModelGroupElementEntityData inData, Entity inParent)
         : base(inData, inParent)
     {

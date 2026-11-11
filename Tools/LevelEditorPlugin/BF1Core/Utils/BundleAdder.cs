@@ -290,13 +290,14 @@ public static class BundleAdder
         }
     }
 
-    private static EbxAssetEntry VariationDatabaseOf(int bundle)
+    /// <summary>The mesh variation database asset of a bundle, or null.</summary>
+    internal static EbxAssetEntry VariationDatabaseOf(int bundle)
     {
         BundleEntry entry = App.AssetManager.GetBundleEntry(bundle);
         return entry == null ? null : App.AssetManager.EnumerateEbx(entry).FirstOrDefault(e => e.Type == "MeshVariationDatabase");
     }
 
-    private static Guid MeshOf(object variationEntry)
+    internal static Guid MeshOf(object variationEntry)
     {
         try
         {

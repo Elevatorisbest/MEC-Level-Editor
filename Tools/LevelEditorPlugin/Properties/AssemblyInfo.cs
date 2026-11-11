@@ -35,6 +35,7 @@ using System.Windows;
 [assembly: RegisterMenuExtension(typeof(LevelEditorPlugin.AssetBrowser.AssetBrowserMenuExtension))]
 [assembly: RegisterMenuExtension(typeof(LevelEditorPlugin.SubWorlds.SubWorldPickerMenuExtension))]
 [assembly: RegisterMenuExtension(typeof(LevelEditorPlugin.SubWorlds.AssetListExportMenuExtension))]
+[assembly: RegisterMenuExtension(typeof(LevelEditorPlugin.Shapes.ShapeBuilderMenuExtension))]
 
 // Mirror's Edge Catalyst mesh fallback pixel shader (replaces FrostyPlugin's built-in one; see
 // Shaders/MecMeshFallback.hlsl and the CompileMecShader target in the .csproj).

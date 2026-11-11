@@ -1,0 +1,77 @@
+# Shape Builder
+
+**Map > Shape Builder** makes brand-new objects for building new areas: box, plane, ramp,
+stairs, cylinder and corner (L-shaped wall piece), with a real game material and MEC collision.
+Code: `Tools/LevelEditorPlugin/Shapes/`.
+
+## Using it
+
+1. Open a level and click into its view once.
+2. **Surface:** select an object in the level whose look you want (a wall, a floor, a crate),
+   press **From selected object** and pick one of its materials. Used surfaces stay in the list.
+   Tiling materials (walls, floors, concrete, metal) look best: shapes get world-scale UVs, so the
+   texture repeats every *Texture repeats every* metres on every face, whatever the size.
+3. **Shape and size** in metres. The origin is the bottom centre. Ramps and stairs rise towards
+   their back (+Z); a cylinder's width is its diameter; a plane faces up. *Round sizes to* snaps
+   every size (default 0.25 m).
+4. **Collision and movement:** collision boxes are on by default (see below). The *Can't stand /
+   climb / vault / wallrun* flags are MEC's own and are set on the model and its boxes.
+5. **Place:** into the level root (always loaded) or into the selected object's layer.
+   **Create in front of the camera** places it at *Distance* (auto: so the whole shape is in
+   view), turned to face away from the camera in 90° steps.
+6. Move and rotate it with the gizmos like any other object. Ctrl+Z removes it.
+
+Do not resize shapes with the scale gizmo: collision boxes may not follow a scale in game.
+Make a new one with the size you want instead.
+
+## What gets created
+
+Per shape, in `<level folder>/LevelEditorShapes/` (for SP_MainCity:
+`Levels/SP/SP_MainCity/LevelEditorShapes/Shape001_box_4x1x4` and `..._mesh`):
+
+- **Mesh:** a copy of the surface's mesh (ebx, MeshSet resource, LOD chunks) with the generated
+  geometry in the chosen material's section (other sections are emptied), new bounds and no
+  occluder mesh. The geometry goes through a temporary FBX file and Frosty's normal FBX importer,
+  which handles MEC's vertex formats. All LODs get the same geometry.
+- **Mesh variation entry:** the surface mesh's entry, pointed at the new mesh, added to the
+  target bundle's mesh variation database (MEC takes a mesh's textures from there).
+- **Prefab** (SpatialPrefabBlueprint) with one static model (PamStaticModelEntityData, no Havok
+  physics) and one PamOBBCollisionEntityData per collision box. Their other field values (realm
+  flags, collision layer, surface material) are copied from existing objects of the open level.
+- **Placed reference** to the prefab in the target layer (undo, network registries as for placed
+  props).
+- **Bundles:** everything is added to the target layer's bundle, plus what it uses (shaders,
+  textures) with "assets + resources + data chunks" (Test 3, verified in game for placed props),
+  whatever the Bundles option is set to.
+
+Undo removes the placed object; the new assets stay in the project (unused, harmless).
+
+## Collision
+
+MEC's `PamOBBCollisionEntity` boxes (oriented boxes; walkable, verified in game by moving an
+existing one). Per shape:
+
+| Shape | Boxes |
+|---|---|
+| Box | one box |
+| Plane | a 0.3 m slab under the surface |
+| Ramp | a 0.3 m slab tilted under the slope, and a slab at the high back |
+| Stairs | one box per step, from the floor to the step's top |
+| Cylinder | one box per pair of opposite sides, together covering the cylinder |
+| Corner | one box per arm |
+
+## Checked so far
+
+- Geometry: every shape is closed and wound outwards (volume matches the shape, every triangle's
+  winding agrees with its normal), tangents are perpendicular to normals, and the collision
+  boxes cover the shape (4,000 random points per shape), in a test outside the editor.
+- Winding: front faces are counter-clockwise with outward normals (`cross(v1-v0, v2-v0)` points
+  out), derived from Frosty's renderer (back-face culling with X mirrored), which shows game
+  meshes correctly.
+- Not yet run in the editor or the game.
+
+## Not done
+
+- Editing a shape after it is made (change its size later): make a new one for now.
+- More shapes (arches, curved ramps), face push/pull, per-face materials.
+- Model import (planned separately).

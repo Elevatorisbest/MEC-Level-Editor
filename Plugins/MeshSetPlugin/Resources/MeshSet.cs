@@ -1796,6 +1796,23 @@ namespace MeshSetPlugin.Resources
             }
         }
         public AxisAlignedBox BoundingBox => m_boundingBox;
+
+        /// <summary>
+        /// Replaces the mesh bounds and any part bounds. The FBX importer keeps the old bounds; the
+        /// level editor's shape builder sets them for its generated geometry (the game culls with them).
+        /// </summary>
+        public void SetBoundingBox(AxisAlignedBox box)
+        {
+            m_boundingBox = box;
+            for (int i = 0; i < m_partBoundingBoxes.Count; i++)
+                m_partBoundingBoxes[i] = box;
+            foreach (MeshSetLod lod in m_lods)
+            {
+                for (int i = 0; i < lod.PartBoundingBoxes.Count; i++)
+                    lod.PartBoundingBoxes[i] = box;
+            }
+        }
+
         public List<MeshSetLod> Lods => m_lods;
         public MeshType Type { get => m_meshType; set => m_meshType = value; }
         public MeshSetLayoutFlags Flags => m_flags;
