@@ -168,6 +168,8 @@
                     <ComboBoxItem Content="Test: no new mesh, use the surface's own mesh" />
                 </ComboBox>
                 <TextBlock Style="{StaticResource Hint}" Text="The test kinds show the selected object's model (not the shape) with the shape's collision boxes; their names end in _testcopy / _testoriginal." />
+                <Button x:Name="Button_VisibilityTest" Margin="0,6,0,0" HorizontalAlignment="Left" Click="Button_VisibilityTest_Click" Content="Visibility test: place 6 objects in a row" ToolTip="Places six objects left to right that differ in one step each (game blueprint, in a new prefab, copied blueprint, without physics, with the generated mesh, full shape). Check in game which numbers you can see; the log lists them." />
+                <TextBlock Style="{StaticResource Hint}" Text="1 game's blueprint · 2 it inside a new prefab · 3 copy of the blueprint · 4 copy without physics · 5 copy with the shape's mesh · 6 new prefab with 5 + collision (left to right)." />
 
                 <TextBlock Style="{StaticResource Heading}" Text="Place" />
                 <StackPanel Orientation="Horizontal">

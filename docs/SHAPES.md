@@ -105,6 +105,14 @@ existing one). Per shape:
   models (no components, part infos, part links or runtime component counts). The log lists the
   template's component types and runtime counts. Whether the Normal crash has the same cause is
   not known yet.
+- bd79e52 result: no crash any more; `_testoriginal` and Normal both invisible, collision works.
+  The level has 0 self-contained static models (every standalone one has a PartComponentData);
+  only ~160 standalone PamStaticModelEntityData exist among ~980k entities, while placing a game
+  ObjectBlueprint is verified to show in game. Next: **Visibility test** button (6 objects in a
+  row): 1 game blueprint placed directly; 2 a new prefab referencing it; 3 an unchanged copy of
+  the blueprint; 4 the copy without PhysicsData; 5 the copy with the generated mesh; 6 a new
+  prefab referencing 5 plus collision boxes. Which numbers show in game tells which step hides
+  the model.
 
 ## Checked so far
 

@@ -308,7 +308,11 @@ public partial class ShapeBuilderWindow : FrostyDockableWindow
 
     // --- creating --------------------------------------------------------------------------
 
-    private void Button_Create_Click(object sender, RoutedEventArgs e)
+    private void Button_VisibilityTest_Click(object sender, RoutedEventArgs e) => CreateOrTest(true);
+
+    private void Button_Create_Click(object sender, RoutedEventArgs e) => CreateOrTest(false);
+
+    private void CreateOrTest(bool visibilityTest)
     {
         ShapeParameters p = ReadParameters(out string error);
         if (p == null)
@@ -358,6 +362,13 @@ public partial class ShapeBuilderWindow : FrostyDockableWindow
         try
         {
             // on the UI thread like other placing: entities, layers and panels are updated here
+            if (visibilityTest)
+            {
+                Text_Status.Text = ShapeAssetBuilder.RunVisibilityTest(p, surface, options, target, screen, placement);
+                RememberSurface(surface);
+                App.NotificationManager.Show("Visibility test placed (6 objects)");
+                return;
+            }
             ShapeResult result = ShapeAssetBuilder.Create(p, surface, options, target, screen, placement);
             RememberSurface(surface);
             screen.EditorProvider?.SelectEntity(result.Placed);

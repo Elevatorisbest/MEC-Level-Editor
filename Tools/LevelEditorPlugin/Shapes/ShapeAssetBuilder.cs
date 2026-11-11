@@ -94,7 +94,7 @@ public sealed class ShapeResult
 /// the loaded level (realm flags, collision layer, surface material, …) instead of zero defaults.
 /// Undo removes the placed object; the new assets stay in the project.
 /// </summary>
-public static class ShapeAssetBuilder
+public static partial class ShapeAssetBuilder
 {
     public const string FolderName = "LevelEditorShapes";
 
@@ -431,12 +431,7 @@ public static class ShapeAssetBuilder
         Guid fileGuid = NewEbxGuid();
         asset.SetFileGuid(fileGuid);
         root.Name = name;
-        if (templates.Prefab != null)
-        {
-            // header values of a real prefab of this level
-            MeshUtil.SetIfPresent(root, "Flags", ((dynamic)templates.Prefab).Flags);
-            MeshUtil.SetIfPresent(root, "TimeDeltaType", ((dynamic)templates.Prefab).TimeDeltaType);
-        }
+        ApplyPrefabHeader(root, templates);
 
         // the static model, with copies of its internal objects. Earlier versions dropped them: the
         // template's one component went missing while its Client/ServerRuntimeComponentCount and
@@ -456,7 +451,16 @@ public static class ShapeAssetBuilder
         ApplyParkourFlags(model, options);
         AddChild(asset, root, model, HighFlags(templates.StaticModel));
 
-        // the collision boxes
+        AddBoxes(asset, root, boxes, options, templates);
+
+        asset.Update();
+        EbxAssetEntry entry = App.AssetManager.AddEbx(name, asset, bundle);
+        App.AssetManager.ModifyEbx(name, asset);
+        return entry;
+    }
+
+    private static void AddBoxes(EbxAsset asset, dynamic root, List<CollisionBox> boxes, ShapeOptions options, Templates templates)
+    {
         foreach (CollisionBox box in boxes)
         {
             // the collision box keeps copies of its own internal objects: its PhysicsBodies entry
@@ -472,11 +476,15 @@ public static class ShapeAssetBuilder
             ApplyParkourFlags(obb, options);
             AddChild(asset, root, obb, HighFlags(templates.Collision));
         }
+    }
 
-        asset.Update();
-        EbxAssetEntry entry = App.AssetManager.AddEbx(name, asset, bundle);
-        App.AssetManager.ModifyEbx(name, asset);
-        return entry;
+    private static void ApplyPrefabHeader(dynamic root, Templates templates)
+    {
+        if (templates.Prefab == null)
+            return;
+        // header values of a real prefab of this level
+        MeshUtil.SetIfPresent(root, "Flags", ((dynamic)templates.Prefab).Flags);
+        MeshUtil.SetIfPresent(root, "TimeDeltaType", ((dynamic)templates.Prefab).TimeDeltaType);
     }
 
     private static void ApplyParkourFlags(object data, ShapeOptions options)
@@ -667,7 +675,7 @@ public static class ShapeAssetBuilder
             }
 
             string Histogram(Dictionary<uint, int> counts) => string.Join(", ", counts.OrderByDescending(kv => kv.Value).Take(6).Select(kv => $"0x{kv.Key:X2}: {kv.Value}"));
-            LevelEditorLog.Info("Shapes", $"Templates from the level: static model {Describe(t.StaticModel)} (score {bestModel}; {selfContained} self-contained static models in the level), collision box {Describe(t.Collision)} (score {bestCollision}), prefab header {(t.Prefab != null ? "found" : "not found")}. Flags high bytes in this level: static models {Histogram(modelHigh)}; collision boxes {Histogram(boxHigh)}");
+            LevelEditorLog.Info("Shapes", $"Templates from the level: static model {Describe(t.StaticModel)} (score {bestModel}; {selfContained} self-contained static models in the level), collision box {Describe(t.Collision)} (score {bestCollision}), prefab header {(t.Prefab != null ? $"from {((dynamic)t.Prefab).Name}: flags 0x{(ushort)((dynamic)t.Prefab).Flags:X4}, time delta {((dynamic)t.Prefab).TimeDeltaType}" : "not found")}. Flags high bytes in this level: static models {Histogram(modelHigh)}; collision boxes {Histogram(boxHigh)}");
             lock (cache)
                 cache[world] = t;
             return t;
@@ -688,7 +696,7 @@ public static class ShapeAssetBuilder
             }
         }
 
-        private static string Describe(object data)
+        internal static string Describe(object data)
         {
             if (data == null)
                 return "not found (defaults are used)";
